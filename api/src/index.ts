@@ -1,0 +1,28 @@
+import 'dotenv/config';
+import cors from 'cors';
+import express from 'express';
+
+const app = express();
+const PORT = Number(process.env.PORT || 4000);
+const HOST = process.env.HOST || '0.0.0.0';
+
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+app.use(
+  (
+    err: Error,
+    _req: express.Request,
+    res: express.Response,
+    _next: express.NextFunction
+  ) => {
+    console.error('[api error]', err);
+    res.status(500).json({ error: err.message || 'server_error' });
+  }
+);
+
+app.listen(PORT, HOST, () => {
+  console.log(`Voca server listening on http://${HOST}:${PORT}`);
+});
