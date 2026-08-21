@@ -1,16 +1,15 @@
 import { NextFunction, Request, Response } from 'express';
-import { SessionPayload, verifySession } from '../lib/jwt';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 declare global {
-  // eslint-disable-next-line @typescript-eslint/no-namespace
   namespace Express {
     interface Request {
-      session?: SessionPayload;
+      userId?: string;
     }
   }
 }
 
-export function requireSession(
+export async function requireSession(
   req: Request,
   res: Response,
   next: NextFunction
@@ -19,10 +18,15 @@ export function requireSession(
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'missing_token' });
 
-  try {
-    req.session = verifySession(token);
-    next();
-  } catch {
+  const {
+    data: { user },
+    error,
+  } = await supabaseAdmin.auth.getUser(token);
+
+  if (error || !user) {
     return res.status(401).json({ error: 'invalid_token' });
   }
+
+  req.userId = user.id;
+  next();
 }
