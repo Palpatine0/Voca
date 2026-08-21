@@ -1,37 +1,41 @@
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../src/context/AuthContext';
-import { useTheme } from '../src/lib/theme';
+import { spacing, typography, useTheme } from '../src/lib/theme';
 
 export default function Index() {
   const { bootstrapped } = useAuth();
-  const { colors } = useTheme();
+  const theme = useTheme();
 
   if (!bootstrapped) {
     return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: colors.bg,
-        }}
-      >
-        <ActivityIndicator color={colors.accent} />
+      <View style={[styles.center, { backgroundColor: theme.colors.canvas }]}>
+        <ActivityIndicator color={theme.colors.primary} />
       </View>
     );
   }
 
   return (
-    <View
-      style={{
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: colors.bg,
-      }}
-    >
-      {/* App entry point — add screens here */}
+    <View style={[styles.center, { backgroundColor: theme.colors.canvas }]}>
+      <Text style={[typography.displaySm, { color: theme.colors.ink }]}>
+        Voca
+      </Text>
+      <Text
+        style={[
+          typography.bodyMd,
+          { color: theme.colors.muted, marginTop: spacing.xs },
+        ]}
+      >
+        Your vocabulary companion
+      </Text>
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  center: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});
