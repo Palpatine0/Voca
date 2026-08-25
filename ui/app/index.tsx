@@ -1,10 +1,11 @@
+import { Redirect } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useAuth } from '../src/context/AuthContext';
-import { spacing, typography, useTheme } from '../src/lib/theme';
+import { useTheme } from '../src/lib/theme';
 
 export default function Index() {
-  const { bootstrapped } = useAuth();
+  const { bootstrapped, session } = useAuth();
   const theme = useTheme();
 
   if (!bootstrapped) {
@@ -15,21 +16,11 @@ export default function Index() {
     );
   }
 
-  return (
-    <View style={[styles.center, { backgroundColor: theme.colors.canvas }]}>
-      <Text style={[typography.displaySm, { color: theme.colors.ink }]}>
-        Voca
-      </Text>
-      <Text
-        style={[
-          typography.bodyMd,
-          { color: theme.colors.muted, marginTop: spacing.xs },
-        ]}
-      >
-        Your vocabulary companion
-      </Text>
-    </View>
-  );
+  if (session) {
+    return <Redirect href="/(tabs)" />;
+  }
+
+  return <Redirect href="/(auth)/login" />;
 }
 
 const styles = StyleSheet.create({

@@ -1,5 +1,5 @@
-import { Platform } from 'react-native';
 import { API_URL } from './config';
+import { supabase } from './supabase';
 
 class ApiError extends Error {
   status: number;
@@ -9,20 +9,21 @@ class ApiError extends Error {
   }
 }
 
-let authToken: string | null = null;
-export function setAuthToken(token: string | null) {
-  authToken = token;
-}
-
 async function request<T>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((init.headers as Record<string, string>) ?? {}),
   };
-  if (authToken) headers.Authorization = `Bearer ${authToken}`;
+  if (session?.access_token) {
+    headers.Authorization = `Bearer ${session.access_token}`;
+  }
 
   const res = await fetch(`${API_URL}${path}`, { ...init, headers });
   const text = await res.text();
@@ -35,4 +36,4 @@ export const api = {
   health: () => request<{ ok: boolean }>('/health'),
 };
 
-export { ApiError };
+export { ApiError, request };

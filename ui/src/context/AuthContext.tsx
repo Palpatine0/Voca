@@ -1,4 +1,4 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Session, User } from '@supabase/supabase-js';
 import React, {
   createContext,
   useCallback,
@@ -6,69 +6,62 @@ import React, {
   useEffect,
   useState,
 } from 'react';
-import { api, setAuthToken } from '../lib/api';
+import { supabase } from '../lib/supabase';
 
-const TOKEN_KEY = 'voca.token';
-const USER_KEY = 'voca.user';
-
-export interface AuthUser {
-  id: string;
-  name: string;
-}
-
-interface Ctx {
+interface AuthState {
   bootstrapped: boolean;
-  user: AuthUser | null;
-  token: string | null;
-  signIn: (token: string, user: AuthUser) => Promise<void>;
+  session: Session | null;
+  user: User | null;
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
-const AuthContext = createContext<Ctx>(null as unknown as Ctx);
+const AuthContext = createContext<AuthState>(null as unknown as AuthState);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [bootstrapped, setBootstrapped] = useState(false);
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const [storedUser, storedToken] = await Promise.all([
-        AsyncStorage.getItem(USER_KEY),
-        AsyncStorage.getItem(TOKEN_KEY),
-      ]);
-      if (storedUser && storedToken) {
-        try {
-          const parsed = JSON.parse(storedUser) as AuthUser;
-          setAuthToken(storedToken);
-          setToken(storedToken);
-          setUser(parsed);
-        } catch {}
-      }
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      setSession(s);
       setBootstrapped(true);
-    })();
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = useCallback(async (newToken: string, newUser: AuthUser) => {
-    setAuthToken(newToken);
-    setToken(newToken);
-    setUser(newUser);
-    await AsyncStorage.multiSet([
-      [TOKEN_KEY, newToken],
-      [USER_KEY, JSON.stringify(newUser)],
-    ]);
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    return { error: error?.message ?? null };
+  }, []);
+
+  const signUp = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signUp({ email, password });
+    return { error: error?.message ?? null };
   }, []);
 
   const signOut = useCallback(async () => {
-    setUser(null);
-    setToken(null);
-    setAuthToken(null);
-    await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY]);
+    await supabase.auth.signOut();
   }, []);
 
   return (
     <AuthContext.Provider
-      value={{ bootstrapped, user, token, signIn, signOut }}
+      value={{
+        bootstrapped,
+        session,
+        user: session?.user ?? null,
+        signIn,
+        signUp,
+        signOut,
+      }}
     >
       {children}
     </AuthContext.Provider>

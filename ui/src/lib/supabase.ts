@@ -6,11 +6,8 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     storage: AsyncStorage,
-    autoRefreshToken: false,
-    persistSession: false,
+    autoRefreshToken: true,
+    persistSession: true,
     detectSessionInUrl: false,
-  },
-  realtime: {
-    params: { eventsPerSecond: 10 },
   },
 });
