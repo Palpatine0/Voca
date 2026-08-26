@@ -32,8 +32,61 @@ async function request<T>(
   return data as T;
 }
 
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface Word {
+  id: string;
+  user_id: string;
+  term: string;
+  definition: string | null;
+  pronunciation_url: string | null;
+  image_url: string | null;
+  easiness_factor: number;
+  interval: number;
+  repetitions: number;
+  next_review_at: string;
+  last_reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface WordStats {
+  total: number;
+  due: number;
+}
+
+// ---------------------------------------------------------------------------
+// API methods
+// ---------------------------------------------------------------------------
+
 export const api = {
   health: () => request<{ ok: boolean }>('/health'),
+
+  getWords: () => request<{ words: Word[] }>('/words'),
+  getDueWords: () => request<{ words: Word[] }>('/words/due'),
+  getWordStats: () => request<WordStats>('/words/stats'),
+
+  createWord: (term: string, definition?: string) =>
+    request<{ word: Word }>('/words', {
+      method: 'POST',
+      body: JSON.stringify({ term, definition }),
+    }),
+
+  updateWord: (id: string, updates: Partial<Pick<Word, 'term' | 'definition' | 'pronunciation_url' | 'image_url'>>) =>
+    request<{ word: Word }>(`/words/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(updates),
+    }),
+
+  deleteWord: (id: string) =>
+    request<{ ok: boolean }>(`/words/${id}`, { method: 'DELETE' }),
+
+  submitReview: (wordId: string, quality: number) =>
+    request<{ word: Word }>('/review', {
+      method: 'POST',
+      body: JSON.stringify({ word_id: wordId, quality }),
+    }),
 };
 
 export { ApiError, request };

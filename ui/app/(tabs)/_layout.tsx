@@ -60,6 +60,12 @@ export default function TabsLayout() {
           ),
         }}
       />
+      <Tabs.Screen
+        name="review"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
 }
