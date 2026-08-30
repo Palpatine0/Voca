@@ -1,13 +1,15 @@
+import { Image } from 'expo-image';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import Animated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { PronunciationButton } from './PronunciationButton';
 import { Word } from '../lib/api';
-import { cardElevation, radii, spacing, typography, useTheme } from '../lib/theme';
+import { radii, spacing, typography, useTheme } from '../lib/theme';
 
 interface FlashCardProps {
   word: Word;
@@ -65,6 +67,12 @@ export function FlashCard({ word }: FlashCardProps) {
         >
           {word.term}
         </Text>
+        {word.pronunciation_url && (
+          <PronunciationButton
+            wordId={word.id}
+            audioUrl={word.pronunciation_url}
+          />
+        )}
         <Text
           style={[
             typography.caption,
@@ -100,16 +108,12 @@ export function FlashCard({ word }: FlashCardProps) {
           {word.definition || 'No definition yet'}
         </Text>
         {word.image_url && (
-          <View
-            style={[
-              styles.imagePreview,
-              { backgroundColor: theme.colors.surfaceStrong },
-            ]}
-          >
-            <Text style={[typography.caption, { color: theme.colors.muted }]}>
-              Image available
-            </Text>
-          </View>
+          <Image
+            source={word.image_url}
+            contentFit="cover"
+            style={styles.imagePreview}
+            accessibilityLabel={`Illustration for ${word.term}`}
+          />
         )}
       </Animated.View>
     </Pressable>
@@ -139,8 +143,8 @@ const styles = StyleSheet.create({
   },
   imagePreview: {
     marginTop: spacing.lg,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.base,
+    width: '100%',
+    height: 120,
     borderRadius: radii.lg,
   },
 });

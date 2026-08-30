@@ -12,14 +12,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { TextInput } from '../../src/components/TextInput';
 import { api } from '../../src/lib/api';
+import { downloadPronunciation } from '../../src/lib/audio';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
+
+type SaveStatus = 'saved' | 'ready' | 'partial';
 
 export default function AddScreen() {
   const theme = useTheme();
   const [term, setTerm] = useState('');
   const [definition, setDefinition] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleAddWord = async () => {
@@ -28,19 +31,34 @@ export default function AddScreen() {
 
     if (!cleanTerm) {
       setError('Enter a word to add to your deck.');
-      setSaved(false);
+      setSaveStatus(null);
       return;
     }
 
     setError(null);
-    setSaved(false);
+    setSaveStatus(null);
     setLoading(true);
 
     try {
-      await api.createWord(cleanTerm, cleanDefinition || undefined);
+      const { word } = await api.createWord(
+        cleanTerm,
+        cleanDefinition || undefined
+      );
       setTerm('');
       setDefinition('');
-      setSaved(true);
+
+      try {
+        const { word: enrichedWord } = await api.enrichWord(word.id);
+        if (enrichedWord.pronunciation_url) {
+          await downloadPronunciation(
+            enrichedWord.id,
+            enrichedWord.pronunciation_url
+          );
+        }
+        setSaveStatus('ready');
+      } catch {
+        setSaveStatus('partial');
+      }
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -95,7 +113,7 @@ export default function AddScreen() {
               onChangeText={(value) => {
                 setTerm(value);
                 if (error) setError(null);
-                if (saved) setSaved(false);
+                if (saveStatus) setSaveStatus(null);
               }}
               placeholder="e.g. ephemeral"
               autoCapitalize="none"
@@ -120,7 +138,7 @@ export default function AddScreen() {
               </Text>
             ) : null}
 
-            {saved ? (
+            {saveStatus ? (
               <View
                 style={[
                   styles.successMessage,
@@ -133,7 +151,11 @@ export default function AddScreen() {
                   color={theme.colors.semanticSuccess}
                 />
                 <Text style={[typography.caption, { color: theme.colors.bodyStrong }]}>
-                  Added to your deck
+                  {saveStatus === 'ready'
+                    ? 'Added with offline pronunciation'
+                    : saveStatus === 'partial'
+                      ? 'Added; enrichment will retry later'
+                      : 'Added to your deck'}
                 </Text>
               </View>
             ) : null}
@@ -147,7 +169,8 @@ export default function AddScreen() {
           </View>
 
           <Text style={[typography.caption, styles.helper, { color: theme.colors.muted }]}>
-            You can add pronunciation and imagery after saving.
+            Pronunciation is saved offline. Illustrations stay online to keep
+            your deck light.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

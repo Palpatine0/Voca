@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import cors from 'cors';
 import express from 'express';
+import enrichRouter from './routes/enrich';
 import reviewRouter from './routes/review';
 import wordsRouter from './routes/words';
 
@@ -15,6 +16,7 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.use('/words', wordsRouter);
 app.use('/review', reviewRouter);
+app.use('/enrich', enrichRouter);
 
 app.use(
   (

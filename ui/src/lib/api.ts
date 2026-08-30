@@ -73,6 +73,16 @@ export const api = {
       body: JSON.stringify({ term, definition }),
     }),
 
+  enrichWord: (wordId: string) =>
+    request<{
+      word: Word;
+      image_available: boolean;
+      pronunciation_available: boolean;
+    }>('/enrich', {
+      method: 'POST',
+      body: JSON.stringify({ word_id: wordId }),
+    }),
+
   updateWord: (id: string, updates: Partial<Pick<Word, 'term' | 'definition' | 'pronunciation_url' | 'image_url'>>) =>
     request<{ word: Word }>(`/words/${id}`, {
       method: 'PATCH',
