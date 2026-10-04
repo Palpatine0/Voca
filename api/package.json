@@ -4,10 +4,14 @@
   "private": true,
   "description": "Voca — backend API.",
   "main": "dist/index.js",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test:setup": "node --test-reporter=spec tests/setup.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
@@ -17,6 +21,7 @@
     "jsonwebtoken": "^9.0.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.6",

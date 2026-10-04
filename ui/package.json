@@ -2,13 +2,18 @@
   "name": "voca-web",
   "version": "1.0.0",
   "main": "expo-router/entry",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "expo start",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "build": "expo export"
+    "build": "expo export",
+    "typecheck": "tsc --noEmit",
+    "assets:generate": "node scripts/generate-assets.mjs"
   },
   "dependencies": {
     "@expo-google-fonts/eb-garamond": "^0.4.3",
@@ -44,6 +49,7 @@
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@types/react": "~18.2.79",
+    "sharp": "0.35.5",
     "typescript": "~5.3.3"
   },
   "private": true

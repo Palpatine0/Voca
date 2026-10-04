@@ -1,9 +1,14 @@
 node_modules
 .env
 .env.local
+.env.*
+!.env.example
 dist
 .expo
 .expo-shared
 web-build
 .DS_Store
 *.log
+.idea/
+supabase/.temp/
+supabase/.branches/

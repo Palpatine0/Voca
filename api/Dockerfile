@@ -1,5 +1,5 @@
 # ---- build stage: compile TypeScript ---------------------------------
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ COPY src ./src
 RUN npm run build
 
 # ---- runtime stage: slim image, production deps only -----------------
-FROM node:20-alpine
+FROM node:22-alpine
 
 WORKDIR /app
 ENV NODE_ENV=production
