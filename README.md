@@ -141,6 +141,7 @@ From the repository root, after installing both packages:
 npm --prefix api run test:setup
 npm --prefix api run build
 npm --prefix ui run typecheck
+npm --prefix ui run test:auth
 npm --prefix ui run build
 ```
 
@@ -150,6 +151,15 @@ ownership enforcement, server access, and bucket configuration. They need no
 credentials and do not contact your Supabase project. They do not validate the
 live Auth/Storage services or external providers. Expo export checks the iOS,
 Android, and web bundles; it does not build native app binaries.
+
+The auth tests exercise the provider, screen handlers, and route guards with
+mocked Supabase responses and native navigation. They cover stored-session
+startup, protected routes, login/logout, both signup confirmation modes, failed
+requests, and native foreground refresh. For a live device check, sign in,
+restart the app, background/foreground it, then sign out and try opening `/add`
+directly. Saved credentials should restore the session; signed-out users should
+always land on login. A restore failure shows a retry action without clearing
+stored credentials. Sign Out affects the current session only.
 
 ## App images
 

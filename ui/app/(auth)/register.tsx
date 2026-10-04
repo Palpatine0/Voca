@@ -25,6 +25,7 @@ export default function RegisterScreen() {
   const [success, setSuccess] = useState(false);
 
   const handleSignUp = async () => {
+    if (loading) return;
     if (!email.trim() || !password.trim()) {
       setError('Please fill in all fields.');
       return;
@@ -39,12 +40,12 @@ export default function RegisterScreen() {
     }
     setError(null);
     setLoading(true);
-    const { error: err } = await signUp(email.trim(), password);
+    const { error: err, needsEmailConfirmation } = await signUp(email.trim(), password);
     setLoading(false);
     if (err) {
       setError(err);
     } else {
-      setSuccess(true);
+      setSuccess(needsEmailConfirmation);
     }
   };
 

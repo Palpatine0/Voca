@@ -1,4 +1,4 @@
-import { Link, router } from 'expo-router';
+import { Link } from 'expo-router';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -23,6 +23,7 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
 
   const handleSignIn = async () => {
+    if (loading) return;
     if (!email.trim() || !password.trim()) {
       setError('Please fill in all fields.');
       return;
