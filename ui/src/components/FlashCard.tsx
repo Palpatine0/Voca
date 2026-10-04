@@ -43,7 +43,12 @@ export function FlashCard({ word }: FlashCardProps) {
   }));
 
   return (
-    <Pressable onPress={flipCard} style={styles.wrapper}>
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={flipped ? 'Show word' : 'Reveal definition'}
+      onPress={flipCard}
+      style={styles.wrapper}
+    >
       {/* Front */}
       <Animated.View
         style={[

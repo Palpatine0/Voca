@@ -141,7 +141,7 @@ From the repository root, after installing both packages:
 npm --prefix api run test:setup
 npm --prefix api run build
 npm --prefix ui run typecheck
-npm --prefix ui run test:auth
+npm --prefix ui test
 npm --prefix ui run build
 ```
 
@@ -160,6 +160,19 @@ restart the app, background/foreground it, then sign out and try opening `/add`
 directly. Saved credentials should restore the session; signed-out users should
 always land on login. A restore failure shows a retry action without clearing
 stored credentials. Sign Out affects the current session only.
+
+The review tests cover failed loads and saves, retrying the same card, rapid
+rating taps, fresh queues/counts after tab navigation, overlapping requests, and
+resetting each card. Pronunciation tests check playback cleanup when a card
+changes or disappears, including downloads and audio creation still in flight.
+Run just these checks with `npm --prefix ui run test:review`.
+
+For a live review check, add two words, open Review, reveal and rate the first,
+then confirm the second starts on its word side. Disable the connection while
+rating: the card should stay visible with a retry message. Restore it and retry,
+then return Home and confirm the due count updates. Audio should stop when you
+leave a card. Automated tests mock the API and native audio; they do not validate
+live SM-2 persistence or device playback.
 
 ## App images
 

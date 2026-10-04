@@ -1,11 +1,13 @@
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useState } from 'react';
+import { router, useFocusEffect } from 'expo-router';
+import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Button } from '../../src/components/Button';
 import { FlashCard } from '../../src/components/FlashCard';
 import { GradientOrb } from '../../src/components/GradientOrb';
 import { RatingButtons } from '../../src/components/RatingButtons';
 import { api, Word } from '../../src/lib/api';
+import { saveReview, waitForReviewSaves } from '../../src/lib/review';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
 
 export default function ReviewScreen() {
@@ -14,44 +16,99 @@ export default function ReviewScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [submitError, setSubmitError] = useState(false);
+  const focused = useRef(false);
+  const requestId = useRef(0);
+  const pendingReview = useRef<ReturnType<typeof api.submitReview> | null>(null);
 
   const fetchDue = useCallback(async () => {
+    const request = ++requestId.current;
+    setLoading(true);
+    setLoadError(false);
+    setSubmitError(false);
+    setSubmitting(false);
+    setWords([]);
+    setCurrentIndex(0);
     try {
+      await waitForReviewSaves();
+      if (!focused.current || request !== requestId.current) return;
       const { words: due } = await api.getDueWords();
-      setWords(due);
-    } catch {}
-    setLoading(false);
+      if (focused.current && request === requestId.current) setWords(due);
+    } catch {
+      if (focused.current && request === requestId.current) setLoadError(true);
+    } finally {
+      if (focused.current && request === requestId.current) setLoading(false);
+    }
   }, []);
 
-  useEffect(() => {
-    fetchDue();
-  }, [fetchDue]);
+  useFocusEffect(useCallback(() => {
+    focused.current = true;
+    void fetchDue();
+    return () => {
+      focused.current = false;
+      requestId.current += 1;
+      // Unmount the card on blur so its pronunciation cannot keep playing.
+      setWords([]);
+      setLoading(true);
+    };
+  }, [fetchDue]));
 
   const handleRate = async (quality: number) => {
     const word = words[currentIndex];
-    if (!word || submitting) return;
+    if (!word || loading || !focused.current || pendingReview.current) return;
 
+    const request = requestId.current;
     setSubmitting(true);
+    setSubmitError(false);
+    const submission = saveReview(word.id, quality);
+    pendingReview.current = submission;
     try {
-      await api.submitReview(word.id, quality);
-    } catch {}
-    setSubmitting(false);
-
-    if (currentIndex < words.length - 1) {
-      setCurrentIndex((i) => i + 1);
-    } else {
-      setWords([]);
+      await submission;
+      if (focused.current && request === requestId.current) {
+        setCurrentIndex((i) => i + 1);
+      }
+    } catch {
+      if (focused.current && request === requestId.current) setSubmitError(true);
+    } finally {
+      if (pendingReview.current === submission) pendingReview.current = null;
+      if (focused.current && request === requestId.current) setSubmitting(false);
     }
   };
 
   const currentWord = words[currentIndex];
-  const isComplete = !loading && (words.length === 0 || !currentWord);
+  const isComplete = !loading && !loadError && !currentWord;
 
   if (loading) {
     return (
       <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]}>
         <View style={styles.center}>
           <ActivityIndicator color={theme.colors.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]}>
+        <View style={styles.center}>
+          <Text style={[typography.displaySm, { color: theme.colors.ink }]}>
+            Couldn't load your review
+          </Text>
+          <Text
+            accessibilityRole="alert"
+            style={[typography.bodyMd, styles.message, { color: theme.colors.semanticError }]}
+          >
+            Check your connection and try again.
+          </Text>
+          <Button label="Try again" onPress={fetchDue} style={{ marginTop: spacing.lg }} />
+          <Button
+            label="Back to Home"
+            variant="outline"
+            onPress={() => router.replace('/(tabs)')}
+            style={{ marginTop: spacing.sm }}
+          />
         </View>
       </SafeAreaView>
     );
@@ -74,7 +131,7 @@ export default function ReviewScreen() {
             You've reviewed all words due today.{'\n'}Come back tomorrow.
           </Text>
           <Pressable
-            onPress={() => router.back()}
+            onPress={() => router.replace('/(tabs)')}
             style={({ pressed }) => [
               styles.backButton,
               {
@@ -98,7 +155,7 @@ export default function ReviewScreen() {
       <View style={styles.container}>
         {/* Progress */}
         <View style={styles.progressRow}>
-          <Pressable onPress={() => router.back()}>
+          <Pressable onPress={() => router.replace('/(tabs)')}>
             <Text style={[typography.bodyStrong, { color: theme.colors.ink }]}>
               ← Back
             </Text>
@@ -110,18 +167,26 @@ export default function ReviewScreen() {
 
         {/* Card */}
         <View style={styles.cardArea}>
-          <FlashCard word={currentWord} />
+          <FlashCard key={currentWord.id} word={currentWord} />
         </View>
 
         {/* Rating buttons */}
         <View style={styles.ratingArea}>
+          {submitError && (
+            <Text
+              accessibilityRole="alert"
+              style={[typography.caption, styles.message, { color: theme.colors.semanticError }]}
+            >
+              Couldn't save your review. Try your rating again.
+            </Text>
+          )}
           <Text
             style={[
               typography.caption,
               { color: theme.colors.muted, textAlign: 'center', marginBottom: spacing.sm },
             ]}
           >
-            How well did you remember?
+            {submitting ? 'Saving your review…' : 'How well did you remember?'}
           </Text>
           <RatingButtons onRate={handleRate} disabled={submitting} />
         </View>
@@ -155,6 +220,10 @@ const styles = StyleSheet.create({
   },
   ratingArea: {
     paddingBottom: spacing.lg,
+  },
+  message: {
+    textAlign: 'center',
+    marginVertical: spacing.sm,
   },
   backButton: {
     marginTop: spacing.xl,

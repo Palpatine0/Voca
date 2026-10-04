@@ -8,10 +8,10 @@ interface RatingButtonsProps {
 }
 
 const RATINGS = [
-  { quality: 1, label: 'Again', sublabel: '< 1 day' },
-  { quality: 3, label: 'Hard', sublabel: '1 day' },
-  { quality: 4, label: 'Good', sublabel: 'Scheduled' },
-  { quality: 5, label: 'Easy', sublabel: 'Long' },
+  { quality: 1, label: 'Again', sublabel: 'Forgot' },
+  { quality: 3, label: 'Hard', sublabel: 'With effort' },
+  { quality: 4, label: 'Good', sublabel: 'Remembered' },
+  { quality: 5, label: 'Easy', sublabel: 'Right away' },
 ] as const;
 
 export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
@@ -22,6 +22,8 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
       {RATINGS.map(({ quality, label, sublabel }) => (
         <Pressable
           key={quality}
+          accessibilityRole="button"
+          accessibilityLabel={label}
           onPress={() => onRate(quality)}
           disabled={disabled}
           style={({ pressed }) => [

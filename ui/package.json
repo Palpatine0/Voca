@@ -13,7 +13,9 @@
     "web": "expo start --web",
     "build": "expo export",
     "typecheck": "tsc --noEmit",
+    "test": "jest --runInBand",
     "test:auth": "jest --runInBand tests/auth.test.tsx",
+    "test:review": "jest --runInBand tests/review.test.tsx tests/pronunciation.test.tsx",
     "assets:generate": "node scripts/generate-assets.mjs"
   },
   "dependencies": {
