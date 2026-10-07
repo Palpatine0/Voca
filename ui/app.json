@@ -19,8 +19,8 @@
       "bundleIdentifier": "com.voca.app",
       "appleTeamId": "LGLS23SV95",
       "infoPlist": {
-        "NSCameraUsageDescription": "Voca uses the camera.",
-        "NSPhotoLibraryUsageDescription": "Voca reads your photo library.",
+        "NSCameraUsageDescription": "Voca photographs text so you can choose words to learn.",
+        "NSPhotoLibraryUsageDescription": "Voca reads text in photos you choose to import words.",
         "NSMicrophoneUsageDescription": "Voca uses the microphone."
       }
     },
@@ -48,8 +48,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Voca needs access to your photos.",
-          "cameraPermission": "Voca needs access to your camera."
+          "photosPermission": "Voca reads text in photos you choose to import words.",
+          "cameraPermission": "Voca photographs text so you can choose words to learn."
         }
       ]
     ],

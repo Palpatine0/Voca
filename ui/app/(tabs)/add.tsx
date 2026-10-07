@@ -3,6 +3,7 @@ import React, { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { TextInput } from '../../src/components/TextInput';
+import { PhotoImport } from '../../src/components/PhotoImport';
 import { api } from '../../src/lib/api';
 import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { supportsOfflineAudio } from '../../src/lib/audio';
@@ -28,6 +30,7 @@ export default function AddScreen() {
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [method, setMethod] = useState<'manual' | 'photo'>('manual');
 
   const handleAddWord = async () => {
     if (adding.current || !user) return;
@@ -107,7 +110,18 @@ export default function AddScreen() {
             </Text>
           </View>
 
-          <View
+          <View style={[styles.methods, { backgroundColor: theme.colors.surfaceStrong }]} accessibilityRole="tablist">
+            {(['manual', 'photo'] as const).map((value) => <Pressable key={value}
+              accessibilityRole="tab" accessibilityState={{ selected: method === value }}
+              onPress={() => setMethod(value)}
+              style={[styles.method, method === value && { backgroundColor: theme.colors.surfaceCard }]}>
+              <Text style={[typography.button, { color: method === value ? theme.colors.ink : theme.colors.muted }]}>
+                {value === 'manual' ? 'Type a word' : 'From a photo'}
+              </Text>
+            </Pressable>)}
+          </View>
+
+          {method === 'photo' ? <PhotoImport key={user?.id} /> : <View
             style={[
               styles.formCard,
               {
@@ -172,7 +186,7 @@ export default function AddScreen() {
               loading={loading}
               style={styles.submitButton}
             />
-          </View>
+          </View>}
 
           <Text style={[typography.caption, styles.helper, { color: theme.colors.muted }]}>
             {supportsOfflineAudio
@@ -214,6 +228,8 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     gap: spacing.lg,
   },
+  methods: { flexDirection: 'row', padding: 4, borderRadius: radii.pill, marginBottom: spacing.lg },
+  method: { flex: 1, minHeight: 44, borderRadius: radii.pill, alignItems: 'center', justifyContent: 'center' },
   definitionInput: {
     minHeight: 104,
   },

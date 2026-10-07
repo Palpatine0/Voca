@@ -78,10 +78,16 @@ export const api = {
   getDueWords: () => request<{ words: Word[] }>('/words/due'),
   getWordStats: () => request<WordStats>('/words/stats'),
 
-  createWord: (term: string, definition?: string, userId?: string) =>
+  scanPhoto: (imageBase64: string, userId: string) =>
+    request<{ words: string[]; truncated: boolean }>('/ocr', {
+      method: 'POST',
+      body: JSON.stringify({ image_base64: imageBase64 }),
+    }, userId),
+
+  createWord: (term: string, definition?: string, userId?: string, clientId?: string) =>
     request<{ word: Word }>('/words', {
       method: 'POST',
-      body: JSON.stringify({ term, definition }),
+      body: JSON.stringify({ term, definition, client_id: clientId }),
     }, userId),
 
   enrichWord: (wordId: string, userId?: string) =>

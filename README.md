@@ -140,6 +140,7 @@ From the repository root, after installing both packages:
 ```bash
 npm --prefix api run test:setup
 npm --prefix api run test:enrich
+npm --prefix api run test:ocr
 npm --prefix api run build
 npm --prefix ui run typecheck
 npm --prefix ui test
@@ -211,6 +212,47 @@ and providers; no credentials or paid requests are needed. For a device check,
 add a word, wait for **Pronunciation saved offline** in Library, enable airplane
 mode, restart Voca, and play it. Interrupt another word's download, restore the
 connection, and use **Refresh and retry** to verify recovery.
+
+## Photo import
+
+In **Add → From a photo**, take a photo or choose one, then tap individual word
+chips and add the selection. This first version recognizes printed English.
+Repeated words are combined, and words already in the local deck are marked as
+saved. A scan displays at most 150 unique words; use closer photos for longer
+passages. Blurry, rotated, or handwritten text may need another photo. Definitions
+remain optional, just as in manual entry.
+
+Scanning requires a connection to Voca's API. The app converts the selected photo
+to JPEG and reduces its longest edge to 2048 pixels. The authenticated `/ocr`
+endpoint accepts at most 4 MiB of image bytes (6 MiB JSON body) and rejects decoded
+images above 16 megapixels. Photos are processed in memory and are not stored on
+the server. The native app deletes its resized temporary copy; the original photo
+is left untouched. Browser camera support varies; desktop browsers may show a
+file chooser instead.
+
+OCR uses [Tesseract.js](https://github.com/naptha/tesseract.js) with English language
+data installed as an API dependency. No OCR service key or runtime language-model
+download is needed. Each scan runs in a disposable process with a 45-second
+deadline. One scan runs per API process; concurrent requests receive a retry
+message instead of growing an unbounded job queue. Deploy the updated API and UI
+together. The API build includes `ocrProcess.js`, and production dependencies
+include the OCR engine, English data, and Sharp.
+
+Each selected word uses the normal enrichment/offline-audio queue. Successfully
+saved words leave the selection; failures retain the remaining selection. Stable
+word IDs prevent duplicate inserts when retrying a lost response within the same
+photo-import session, without resetting review history. These IDs are kept in
+memory; after closing the import screen or restarting, refresh Library before
+repeating a save whose outcome was uncertain. Local storage failures report that
+the word was saved online and direct the user to refresh Library.
+
+`npm --prefix api run test:ocr` includes a real OCR test using a generated text
+image, along with upload limits, authentication, timeouts, concurrency, and
+idempotent saves. `npm --prefix ui run test:ocr` covers permissions, cancellation,
+resizing, chips, partial failures, stale results, and account changes. For a device
+check, photograph printed text, select two words, confirm them in Library, then
+interrupt a save and retry. Native camera permission prompts and real photos still
+need validation on iOS and Android devices.
 
 ## App images
 

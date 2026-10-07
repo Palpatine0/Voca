@@ -12,14 +12,18 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test:setup": "node --test-reporter=spec tests/setup.test.mjs",
-    "test:enrich": "tsx --test tests/enrich.test.ts"
+    "test:enrich": "tsx --test tests/enrich.test.ts",
+    "test:ocr": "tsx --test tests/ocr.test.ts tests/import.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
+    "@tesseract.js-data/eng": "1.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "sharp": "0.35.5",
+    "tesseract.js": "7.0.0"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
