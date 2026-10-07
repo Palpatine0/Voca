@@ -41,6 +41,7 @@ jest.mock('../src/context/DeckContext', () => ({
 }));
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
+  useSafeAreaInsets: () => ({ top: 0, left: 0, right: 0, bottom: 0 }),
 }));
 jest.mock('react-native/Libraries/AppState/AppState', () => ({
   currentState: 'active',

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
+import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
 
 export default function SettingsScreen() {
@@ -82,6 +83,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
+    paddingBottom: TAB_DOCK_CLEARANCE,
   },
   signOutButton: {
     marginTop: spacing.xl,

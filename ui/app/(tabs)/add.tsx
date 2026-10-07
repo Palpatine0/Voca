@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { TextInput } from '../../src/components/TextInput';
 import { api } from '../../src/lib/api';
+import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { supportsOfflineAudio } from '../../src/lib/audio';
 import { useAuth } from '../../src/context/AuthContext';
 import { useDeck } from '../../src/context/DeckContext';
@@ -190,7 +191,7 @@ const styles = StyleSheet.create({
   content: {
     flexGrow: 1,
     padding: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingBottom: TAB_DOCK_CLEARANCE,
   },
   header: {
     paddingTop: spacing.lg,

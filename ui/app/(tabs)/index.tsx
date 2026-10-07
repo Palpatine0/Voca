@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { GradientOrb } from '../../src/components/GradientOrb';
 import { api, WordStats } from '../../src/lib/api';
+import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { waitForReviewSaves } from '../../src/lib/review';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
 
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.xxl,
+    paddingBottom: TAB_DOCK_CLEARANCE,
   },
   header: {
     paddingTop: spacing.lg,

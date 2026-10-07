@@ -6,6 +6,7 @@ import { Button } from '../../src/components/Button';
 import { PronunciationButton } from '../../src/components/PronunciationButton';
 import { useDeck } from '../../src/context/DeckContext';
 import { supportsOfflineAudio } from '../../src/lib/audio';
+import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
 
 export default function LibraryScreen() {
@@ -66,7 +67,7 @@ export default function LibraryScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { padding: spacing.lg, paddingBottom: spacing.xxl },
+  content: { padding: spacing.lg, paddingBottom: TAB_DOCK_CLEARANCE },
   header: { paddingVertical: spacing.lg, marginBottom: spacing.base },
   description: { marginTop: spacing.xs },
   card: { borderWidth: 1, borderRadius: radii.xl, padding: spacing.lg, marginBottom: spacing.sm },

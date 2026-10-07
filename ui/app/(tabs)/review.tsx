@@ -7,6 +7,7 @@ import { FlashCard } from '../../src/components/FlashCard';
 import { GradientOrb } from '../../src/components/GradientOrb';
 import { RatingButtons } from '../../src/components/RatingButtons';
 import { api, Word } from '../../src/lib/api';
+import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { saveReview, waitForReviewSaves } from '../../src/lib/review';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
 
@@ -202,10 +203,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,
+    paddingBottom: TAB_DOCK_CLEARANCE,
   },
   container: {
     flex: 1,
     paddingHorizontal: spacing.lg,
+    paddingBottom: TAB_DOCK_CLEARANCE,
   },
   progressRow: {
     flexDirection: 'row',
