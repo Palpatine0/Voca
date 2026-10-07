@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -12,52 +12,52 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { TextInput } from '../../src/components/TextInput';
 import { api } from '../../src/lib/api';
-import { downloadPronunciation } from '../../src/lib/audio';
+import { supportsOfflineAudio } from '../../src/lib/audio';
+import { useAuth } from '../../src/context/AuthContext';
+import { useDeck } from '../../src/context/DeckContext';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
-
-type SaveStatus = 'saved' | 'ready' | 'partial';
 
 export default function AddScreen() {
   const theme = useTheme();
+  const { user } = useAuth();
+  const deck = useDeck();
+  const adding = useRef(false);
   const [term, setTerm] = useState('');
   const [definition, setDefinition] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleAddWord = async () => {
+    if (adding.current || !user) return;
     const cleanTerm = term.trim();
     const cleanDefinition = definition.trim();
 
     if (!cleanTerm) {
       setError('Enter a word to add to your deck.');
-      setSaveStatus(null);
+      setSavedId(null);
       return;
     }
 
     setError(null);
-    setSaveStatus(null);
+    setSavedId(null);
+    adding.current = true;
     setLoading(true);
 
     try {
       const { word } = await api.createWord(
         cleanTerm,
-        cleanDefinition || undefined
+        cleanDefinition || undefined,
+        user.id
       );
       setTerm('');
       setDefinition('');
+      setSavedId(word.id);
 
       try {
-        const { word: enrichedWord } = await api.enrichWord(word.id);
-        if (enrichedWord.pronunciation_url) {
-          await downloadPronunciation(
-            enrichedWord.id,
-            enrichedWord.pronunciation_url
-          );
-        }
-        setSaveStatus('ready');
+        await deck.remember(word);
       } catch {
-        setSaveStatus('partial');
+        setError('Word added, but it could not be saved offline. Free up storage and refresh Library.');
       }
     } catch (requestError) {
       setError(
@@ -66,9 +66,18 @@ export default function AddScreen() {
           : 'Unable to add this word right now.'
       );
     } finally {
+      adding.current = false;
       setLoading(false);
     }
   };
+  const saved = deck.entries.find((entry) => entry.word.id === savedId);
+  const saveMessage = saved?.audioReady
+    ? 'Added with offline pronunciation'
+    : saved?.enrichmentComplete && !supportsOfflineAudio
+      ? 'Added with online pronunciation'
+      : saved
+        ? 'Added. Unfinished audio and images will retry while Voca is open.'
+        : 'Added to your deck';
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]}>
@@ -113,7 +122,7 @@ export default function AddScreen() {
               onChangeText={(value) => {
                 setTerm(value);
                 if (error) setError(null);
-                if (saveStatus) setSaveStatus(null);
+                if (savedId) setSavedId(null);
               }}
               placeholder="e.g. ephemeral"
               autoCapitalize="none"
@@ -132,13 +141,13 @@ export default function AddScreen() {
               style={styles.definitionInput}
             />
 
-            {error && term.trim() ? (
+            {error && (term.trim() || savedId) ? (
               <Text style={[typography.caption, { color: theme.colors.semanticError }]}>
                 {error}
               </Text>
             ) : null}
 
-            {saveStatus ? (
+            {savedId ? (
               <View
                 style={[
                   styles.successMessage,
@@ -150,12 +159,8 @@ export default function AddScreen() {
                   size={18}
                   color={theme.colors.semanticSuccess}
                 />
-                <Text style={[typography.caption, { color: theme.colors.bodyStrong }]}>
-                  {saveStatus === 'ready'
-                    ? 'Added with offline pronunciation'
-                    : saveStatus === 'partial'
-                      ? 'Added; enrichment will retry later'
-                      : 'Added to your deck'}
+                <Text style={[typography.caption, { flex: 1, color: theme.colors.bodyStrong }]}>
+                  {saveMessage}
                 </Text>
               </View>
             ) : null}
@@ -169,8 +174,9 @@ export default function AddScreen() {
           </View>
 
           <Text style={[typography.caption, styles.helper, { color: theme.colors.muted }]}>
-            Pronunciation is saved offline. Illustrations stay online to keep
-            your deck light.
+            {supportsOfflineAudio
+              ? 'Saved pronunciation is available in Library, even offline. Illustrations stay online.'
+              : 'Pronunciation plays online in the browser. Use the mobile app for offline audio.'}
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>

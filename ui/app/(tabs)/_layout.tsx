@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { AuthGate } from '../../src/components/AuthGate';
+import { DeckProvider } from '../../src/context/DeckContext';
 import { useTheme } from '../../src/lib/theme';
 
 export default function TabsLayout() {
@@ -9,6 +10,7 @@ export default function TabsLayout() {
 
   return (
     <AuthGate>
+      <DeckProvider>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -69,6 +71,7 @@ export default function TabsLayout() {
           }}
         />
       </Tabs>
+      </DeckProvider>
     </AuthGate>
   );
 }

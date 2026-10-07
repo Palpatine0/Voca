@@ -27,6 +27,7 @@ export async function synthesizeSpeech(
     `${ELEVENLABS_API_URL}/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
     {
       method: 'POST',
+      signal: AbortSignal.timeout(30_000),
       headers: {
         'Content-Type': 'application/json',
         Accept: 'audio/mpeg',

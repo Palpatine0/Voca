@@ -11,11 +11,16 @@ class ApiError extends Error {
 
 async function request<T>(
   path: string,
-  init: RequestInit = {}
+  init: RequestInit = {},
+  expectedUserId?: string
 ): Promise<T> {
   const {
     data: { session },
   } = await supabase.auth.getSession();
+
+  if (expectedUserId && session?.user.id !== expectedUserId) {
+    throw new ApiError(401, 'Account changed. Please try again.');
+  }
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -25,11 +30,17 @@ async function request<T>(
     headers.Authorization = `Bearer ${session.access_token}`;
   }
 
-  const res = await fetch(`${API_URL}${path}`, { ...init, headers });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new ApiError(res.status, data?.error || res.statusText);
-  return data as T;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const res = await fetch(`${API_URL}${path}`, { ...init, headers, signal: controller.signal });
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    if (!res.ok) throw new ApiError(res.status, data?.error || res.statusText);
+    return data as T;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -63,25 +74,26 @@ export interface WordStats {
 export const api = {
   health: () => request<{ ok: boolean }>('/health'),
 
-  getWords: () => request<{ words: Word[] }>('/words'),
+  getWords: (userId?: string) => request<{ words: Word[] }>('/words', {}, userId),
   getDueWords: () => request<{ words: Word[] }>('/words/due'),
   getWordStats: () => request<WordStats>('/words/stats'),
 
-  createWord: (term: string, definition?: string) =>
+  createWord: (term: string, definition?: string, userId?: string) =>
     request<{ word: Word }>('/words', {
       method: 'POST',
       body: JSON.stringify({ term, definition }),
-    }),
+    }, userId),
 
-  enrichWord: (wordId: string) =>
+  enrichWord: (wordId: string, userId?: string) =>
     request<{
       word: Word;
       image_available: boolean;
       pronunciation_available: boolean;
+      enrichment_pending: boolean;
     }>('/enrich', {
       method: 'POST',
       body: JSON.stringify({ word_id: wordId }),
-    }),
+    }, userId),
 
   updateWord: (id: string, updates: Partial<Pick<Word, 'term' | 'definition' | 'pronunciation_url' | 'image_url'>>) =>
     request<{ word: Word }>(`/words/${id}`, {

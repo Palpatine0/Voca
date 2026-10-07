@@ -16,6 +16,7 @@
     "test": "jest --runInBand",
     "test:auth": "jest --runInBand tests/auth.test.tsx",
     "test:review": "jest --runInBand tests/review.test.tsx tests/pronunciation.test.tsx",
+    "test:offline": "jest --runInBand tests/audio.test.ts tests/deck.test.ts tests/offline-ui.test.tsx tests/api.test.ts",
     "assets:generate": "node scripts/generate-assets.mjs"
   },
   "dependencies": {

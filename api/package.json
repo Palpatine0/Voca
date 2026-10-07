@@ -11,7 +11,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "test:setup": "node --test-reporter=spec tests/setup.test.mjs"
+    "test:setup": "node --test-reporter=spec tests/setup.test.mjs",
+    "test:enrich": "tsx --test tests/enrich.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

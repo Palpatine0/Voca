@@ -26,7 +26,7 @@ function deferred<T>() {
 
 async function mount() {
   await act(async () => {
-    root = create(<PronunciationButton wordId="first" audioUrl="https://example.com/first.mp3" />);
+    root = create(<PronunciationButton userId="learner" wordId="first" audioUrl="https://example.com/first.mp3" />);
   });
 }
 
@@ -52,7 +52,7 @@ afterEach(() => { if (root) act(() => root.unmount()); });
 it('plays the current word, pauses/replays it, and unloads when the card leaves', async () => {
   await mount();
   await press();
-  expect(download).toHaveBeenCalledWith('first', 'https://example.com/first.mp3');
+  expect(download).toHaveBeenCalledWith('learner', 'first', 'https://example.com/first.mp3');
   expect(createSound).toHaveBeenCalledWith(
     { uri: 'file:///first.mp3' }, { shouldPlay: false }, expect.any(Function)
   );
@@ -72,12 +72,12 @@ it('disposes the previous audio and loads the new word when props change', async
   await mount();
   await press();
   await act(async () => {
-    root.update(<PronunciationButton wordId="second" audioUrl="https://example.com/second.mp3" />);
+    root.update(<PronunciationButton userId="learner" wordId="second" audioUrl="https://example.com/second.mp3" />);
   });
   expect(sound.unloadAsync).toHaveBeenCalledTimes(1);
   expect(root.root.findByType(Pressable).props.accessibilityLabel).toBe('Play pronunciation');
   await press();
-  expect(download).toHaveBeenLastCalledWith('second', 'https://example.com/second.mp3');
+  expect(download).toHaveBeenLastCalledWith('learner', 'second', 'https://example.com/second.mp3');
   expect(createSound).toHaveBeenCalledTimes(2);
 });
 

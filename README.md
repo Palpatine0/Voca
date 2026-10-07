@@ -139,6 +139,7 @@ From the repository root, after installing both packages:
 
 ```bash
 npm --prefix api run test:setup
+npm --prefix api run test:enrich
 npm --prefix api run build
 npm --prefix ui run typecheck
 npm --prefix ui test
@@ -173,6 +174,43 @@ rating: the card should stay visible with a retry message. Restore it and retry,
 then return Home and confirm the due count updates. Audio should stop when you
 leave a card. Automated tests mock the API and native audio; they do not validate
 live SM-2 persistence or device playback.
+
+## Offline pronunciation and retries
+
+On iOS and Android, added words are saved to an account-specific local deck
+before enrichment starts. Unfinished enrichment and audio downloads resume on
+startup, when the app returns to the foreground, and while the app remains open.
+Failed work backs off from 15 seconds to 15 minutes. Library's **Refresh and
+retry** action retries immediately. This is an app worker, not an OS background
+service; closing Voca pauses retries until the next launch.
+
+Library shows saved words and plays downloaded pronunciation without a network
+connection, including after restart. Stored login state opens local content
+while Supabase refreshes an expired token; server requests still require valid
+authentication. Caches and retry jobs are separated by account, and signing out
+stops that account's worker. Offline audio is marked ready only after a complete
+MP3 download with matching file metadata; partial downloads are replaced on
+retry. Existing audio from the old unverified cache is downloaded once into the
+new validated cache. Deleting app data removes saved words and audio.
+
+The browser plays audio online and does not claim offline downloads. Adding
+words and submitting review ratings still require a connection. Illustrations
+are stored as URLs only; review images use memory caching rather than disk.
+
+The enrichment endpoint keeps successful audio/images when another provider
+fails, returns `enrichment_pending`, and retries only missing media. An uploaded
+MP3 is reused after a failed database update. Overlapping requests for the same
+word are coalesced within one API process; this is not a distributed job lock.
+An image search with no result or an unconfigured Unsplash key finishes without
+an image. API and UI should be deployed together for the new response field.
+
+`npm --prefix ui run test:offline` tests restart recovery, account isolation,
+backoff, partial downloads, honest save feedback, and stalled API requests.
+The API enrichment tests use a local HTTP server with mocked database, storage,
+and providers; no credentials or paid requests are needed. For a device check,
+add a word, wait for **Pronunciation saved offline** in Library, enable airplane
+mode, restart Voca, and play it. Interrupt another word's download, restore the
+connection, and use **Refresh and retry** to verify recovery.
 
 ## App images
 

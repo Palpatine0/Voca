@@ -7,7 +7,7 @@ import React, {
   useState,
 } from 'react';
 import { AppState, Platform } from 'react-native';
-import { supabase } from '../lib/supabase';
+import { readStoredSession, supabase } from '../lib/supabase';
 
 interface AuthState {
   bootstrapped: boolean;
@@ -49,6 +49,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     const restoreSession = async () => {
+      let cached: Session | null = null;
+      try {
+        cached = await readStoredSession();
+        if (active && !authChanged && cached) {
+          // Open device-local content even if refreshing an expired token needs
+          // a connection. Server requests still authenticate through Supabase.
+          setSession(cached);
+          setBootstrapped(true);
+        }
+      } catch {
+        // Let the SDK try its normal restore and report storage failures below.
+      }
       try {
         const { data, error } = await supabase.auth.getSession();
         if (!active || authChanged) return;
@@ -58,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setBootstrapped(true);
       } catch {
         if (!active || authChanged) return;
+        if (cached) return;
         // Keep persisted credentials on storage/network errors and offer retry.
         setSessionError('Unable to restore your session. Please try again.');
       }

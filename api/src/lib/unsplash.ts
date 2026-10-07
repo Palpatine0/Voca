@@ -23,6 +23,7 @@ export async function findIllustrationUrl(term: string): Promise<string | null> 
   });
 
   const response = await fetch(`${UNSPLASH_API_URL}?${params.toString()}`, {
+    signal: AbortSignal.timeout(15_000),
     headers: {
       Authorization: `Client-ID ${accessKey}`,
     },

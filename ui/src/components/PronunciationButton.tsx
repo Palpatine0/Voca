@@ -6,6 +6,7 @@ import { downloadPronunciation } from '../lib/audio';
 import { radii, spacing, typography, useTheme } from '../lib/theme';
 
 interface PronunciationButtonProps {
+  userId: string;
   wordId: string;
   audioUrl: string;
 }
@@ -17,6 +18,7 @@ interface PlaybackSession {
 }
 
 export function PronunciationButton({
+  userId,
   wordId,
   audioUrl,
 }: PronunciationButtonProps) {
@@ -36,7 +38,7 @@ export function PronunciationButton({
       session.disposed = true;
       void session.sound?.unloadAsync().catch(() => undefined);
     };
-  }, [wordId, audioUrl]);
+  }, [userId, wordId, audioUrl]);
 
   const handlePress = async () => {
     const session = playback.current;
@@ -59,7 +61,7 @@ export function PronunciationButton({
         session.sound = null;
       }
 
-      const localUri = await downloadPronunciation(wordId, audioUrl);
+      const localUri = await downloadPronunciation(userId, wordId, audioUrl);
       if (session.disposed) return;
       const result = await Audio.Sound.createAsync(
         { uri: localUri },

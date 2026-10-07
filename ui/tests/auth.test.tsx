@@ -12,9 +12,10 @@ import SettingsScreen from '../app/(tabs)/settings';
 import Index from '../app/index';
 import { AuthGate } from '../src/components/AuthGate';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
-import { supabase } from '../src/lib/supabase';
+import { readStoredSession, supabase } from '../src/lib/supabase';
 
 jest.mock('../src/lib/supabase', () => ({
+  readStoredSession: jest.fn(),
   supabase: { auth: {
     getSession: jest.fn(), onAuthStateChange: jest.fn(),
     signInWithPassword: jest.fn(), signUp: jest.fn(), signOut: jest.fn(),
@@ -35,6 +36,9 @@ jest.mock('expo-router', () => {
   };
 });
 jest.mock('@expo/vector-icons', () => ({ Ionicons: 'Icon' }));
+jest.mock('../src/context/DeckContext', () => ({
+  DeckProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
 }));
@@ -89,6 +93,7 @@ async function pressAction() {
 
 beforeEach(() => {
   jest.resetAllMocks();
+  jest.mocked(readStoredSession).mockResolvedValue(null);
   sdk.getSession.mockResolvedValue({ data: { session: null }, error: null });
   sdk.onAuthStateChange.mockImplementation((callback) => {
     emitAuth = callback;
@@ -228,4 +233,25 @@ it('leaves browser visibility handling to Supabase', async () => {
   await mount(<Text>App</Text>);
   expect(AppState.addEventListener).not.toHaveBeenCalled();
   expect(sdk.startAutoRefresh).not.toHaveBeenCalled();
+});
+
+it('opens saved content while an expired session waits for an offline refresh', async () => {
+  jest.mocked(readStoredSession).mockResolvedValue({ ...savedSession, expires_at: 1 });
+  const pending = deferred<Awaited<ReturnType<typeof supabase.auth.getSession>>>();
+  sdk.getSession.mockReturnValueOnce(pending.promise);
+  await mount(<TabsLayout />);
+  expect(root.root.findByType(Tabs)).toBeDefined();
+  await act(async () => { pending.resolve({ data: { session: null }, error: new Error('offline') as never }); });
+  expect(root.root.findByType(Tabs)).toBeDefined();
+  act(() => emitAuth('SIGNED_OUT', null));
+  expect(root.root.findByType(Redirect).props.href).toBe('/(auth)/login');
+});
+
+it('does not let a late local-session read undo a newer sign-out', async () => {
+  const pending = deferred<Session | null>();
+  jest.mocked(readStoredSession).mockReturnValueOnce(pending.promise);
+  await mount(<TabsLayout />);
+  act(() => emitAuth('SIGNED_OUT', null));
+  await act(async () => { pending.resolve(savedSession); });
+  expect(root.root.findByType(Redirect).props.href).toBe('/(auth)/login');
 });

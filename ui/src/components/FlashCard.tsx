@@ -74,6 +74,7 @@ export function FlashCard({ word }: FlashCardProps) {
         </Text>
         {word.pronunciation_url && (
           <PronunciationButton
+            userId={word.user_id}
             wordId={word.id}
             audioUrl={word.pronunciation_url}
           />
@@ -115,6 +116,7 @@ export function FlashCard({ word }: FlashCardProps) {
         {word.image_url && (
           <Image
             source={word.image_url}
+            cachePolicy="memory"
             contentFit="cover"
             style={styles.imagePreview}
             accessibilityLabel={`Illustration for ${word.term}`}
