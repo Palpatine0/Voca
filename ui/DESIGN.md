@@ -399,7 +399,7 @@ The bottom tab bar follows the requested iOS 26 Liquid Glass-inspired treatment.
 
 - Float a 72px capsule 12px above the bottom safe area, with at least 16px side margins and a maximum width of 480px.
 - Use a translucent, blurred surface with a subtle reflective rim and soft shadow. Match the glass tint to light or dark appearance; use an opaque surface when Reduce Transparency is enabled.
-- Keep Home, Add, Library, and Settings visible, with 24px icons and 11px semibold system labels. The selected tab has a soft pill highlight, a filled icon, and blue ink (`#007aff` in light mode, `#64b5ff` in dark mode).
+- Keep Home, Add, Library, and Settings visible, with 24px icons and 11px semibold system labels. Use curved icon silhouettes with rounded stroke ends and joins in both outline and filled states. The selected tab has a soft pill highlight, a filled icon, and blue ink (`#007aff` in light mode, `#64b5ff` in dark mode).
 - Reserve 104px above the bottom safe area in screen content so the dock does not cover the last item or review controls. Hide the dock while the keyboard is open.
 - Use Expo BlurView on the current SDK. This approximates the appearance without requiring the native iOS 26 Liquid Glass API.
 

@@ -1,8 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { AuthGate } from '../../src/components/AuthGate';
 import { useGlassTabBarOptions } from '../../src/components/GlassTabBar';
+import { RoundedTabIcon } from '../../src/components/RoundedTabIcon';
 import { DeckProvider } from '../../src/context/DeckContext';
 
 export default function TabsLayout() {
@@ -17,7 +17,7 @@ export default function TabsLayout() {
             options={{
               title: 'Home',
               tabBarIcon: ({ color, focused }) => (
-                <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+                <RoundedTabIcon name="home" focused={focused} color={color} />
               ),
             }}
           />
@@ -26,7 +26,7 @@ export default function TabsLayout() {
             options={{
               title: 'Add',
               tabBarIcon: ({ color, focused }) => (
-                <Ionicons name={focused ? 'add-circle' : 'add-circle-outline'} size={25} color={color} />
+                <RoundedTabIcon name="add" focused={focused} color={color} />
               ),
             }}
           />
@@ -35,7 +35,7 @@ export default function TabsLayout() {
             options={{
               title: 'Library',
               tabBarIcon: ({ color, focused }) => (
-                <Ionicons name={focused ? 'book' : 'book-outline'} size={24} color={color} />
+                <RoundedTabIcon name="library" focused={focused} color={color} />
               ),
             }}
           />
@@ -44,7 +44,7 @@ export default function TabsLayout() {
             options={{
               title: 'Settings',
               tabBarIcon: ({ color, focused }) => (
-                <Ionicons name={focused ? 'settings' : 'settings-outline'} size={24} color={color} />
+                <RoundedTabIcon name="settings" focused={focused} color={color} />
               ),
             }}
           />
