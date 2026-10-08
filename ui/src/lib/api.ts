@@ -101,14 +101,14 @@ export const api = {
       body: JSON.stringify({ word_id: wordId }),
     }, userId),
 
-  updateWord: (id: string, updates: Partial<Pick<Word, 'term' | 'definition' | 'pronunciation_url' | 'image_url'>>) =>
+  updateWord: (id: string, updates: Partial<Pick<Word, 'term' | 'definition'>>, userId?: string) =>
     request<{ word: Word }>(`/words/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(updates),
-    }),
+    }, userId),
 
-  deleteWord: (id: string) =>
-    request<{ ok: boolean }>(`/words/${id}`, { method: 'DELETE' }),
+  deleteWord: (id: string, userId?: string) =>
+    request<{ ok: boolean }>(`/words/${id}`, { method: 'DELETE' }, userId),
 
   submitReview: (wordId: string, quality: number) =>
     request<{ word: Word }>('/review', {

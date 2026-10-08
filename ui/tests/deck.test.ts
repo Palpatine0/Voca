@@ -1,18 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, ApiError, Word } from '../src/lib/api';
-import { downloadPronunciation, getLocalPronunciationUri } from '../src/lib/audio';
+import { downloadPronunciation, getLocalPronunciationUri, removePronunciation } from '../src/lib/audio';
 import { DeckState, DeckStore, emptyDeck } from '../src/lib/deck';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(), setItem: jest.fn() }));
 jest.mock('../src/lib/api', () => ({
-  api: { getWords: jest.fn(), enrichWord: jest.fn() },
+  api: { getWords: jest.fn(), enrichWord: jest.fn(), updateWord: jest.fn(), deleteWord: jest.fn() },
   ApiError: class extends Error {
     status: number;
     constructor(status: number, message: string) { super(message); this.status = status; }
   },
 }));
 jest.mock('../src/lib/audio', () => ({
-  supportsOfflineAudio: true, downloadPronunciation: jest.fn(), getLocalPronunciationUri: jest.fn(),
+  supportsOfflineAudio: true, downloadPronunciation: jest.fn(), getLocalPronunciationUri: jest.fn(), removePronunciation: jest.fn(),
 }));
 
 const sdk = jest.mocked(api);
@@ -45,6 +45,9 @@ beforeEach(() => {
   storage.setItem.mockImplementation(async (key, value) => { disk.set(key, value); });
   sdk.getWords.mockResolvedValue({ words: [bare] });
   sdk.enrichWord.mockResolvedValue(result);
+  sdk.updateWord.mockImplementation(async (_id, updates) => ({ word: { ...enriched, ...updates } }));
+  sdk.deleteWord.mockResolvedValue({ ok: true });
+  jest.mocked(removePronunciation).mockResolvedValue(undefined);
   localAudio.mockImplementation(async (user, word, url) => audioFiles.get(`${user}/${word}`) === url ? 'file:///audio.mp3' : null);
   audio.mockImplementation(async (user, word, url) => { audioFiles.set(`${user}/${word}`, url); return 'file:///audio.mp3'; });
   store = new DeckStore('user', (value) => { state = value; });
@@ -168,4 +171,107 @@ it('surfaces storage failure without starting a job that was not persisted', asy
   await expect(store.remember(bare)).rejects.toThrow('disk full');
   expect(sdk.enrichWord).not.toHaveBeenCalled();
   expect(state.entries).toEqual([]);
+});
+
+it('edits definitions without losing offline audio or review progress', async () => {
+  await store.remember(enriched); await store.sync(false, false);
+  await store.updateWord('word', { term: 'serene', definition: 'Peaceful and calm' });
+  expect(sdk.updateWord).toHaveBeenCalledWith('word', { term: 'serene', definition: 'Peaceful and calm' }, 'user');
+  expect(state.entries[0]).toMatchObject({ audioReady: true, enrichmentComplete: true, word: { definition: 'Peaceful and calm', next_review_at: enriched.next_review_at } });
+  expect(removePronunciation).not.toHaveBeenCalled();
+});
+
+it('does not resurrect a deleted word when an older refresh completes', async () => {
+  await store.remember(enriched); await store.sync(false, false);
+  const pending = deferred<{ words: Word[] }>();
+  sdk.getWords.mockReturnValueOnce(pending.promise);
+  const refresh = store.sync();
+  await Promise.resolve();
+  await store.removeWord('word');
+  pending.resolve({ words: [enriched] }); await refresh;
+  expect(state.entries).toEqual([]);
+  expect(JSON.parse(disk.get('voca:deck:v1:user')!).entries).toEqual([]);
+  expect(sdk.deleteWord).toHaveBeenCalledWith('word', 'user');
+  expect(removePronunciation).toHaveBeenCalledWith('user', 'word');
+});
+
+it('ignores an old enrichment result after rename and prepares media for the new word', async () => {
+  const pending = deferred<typeof result>();
+  const started = deferred<void>();
+  sdk.enrichWord.mockImplementationOnce(() => { started.resolve(); return pending.promise; });
+  await store.remember(bare); await started.promise;
+  const running = store.sync(false, false);
+  const renamed = { ...bare, term: 'tranquil' };
+  sdk.updateWord.mockResolvedValueOnce({ word: renamed });
+  await store.updateWord('word', { term: 'tranquil', definition: 'Calm' });
+  pending.resolve(result); await running;
+  expect(state.entries[0]).toMatchObject({ word: renamed, audioReady: false });
+  expect(audio).not.toHaveBeenCalled();
+  sdk.enrichWord.mockResolvedValueOnce({ ...result, word: { ...enriched, term: 'tranquil', pronunciation_url: 'https://example.com/new.mp3' } });
+  await store.sync(true, false);
+  expect(state.entries[0]).toMatchObject({ word: { term: 'tranquil' }, audioReady: true });
+  expect(removePronunciation).toHaveBeenCalledWith('user', 'word');
+});
+
+it('keeps failed edits/deletes intact and blocks duplicate mutations', async () => {
+  await store.remember(enriched); await store.sync(false, false);
+  sdk.updateWord.mockRejectedValueOnce(new Error('offline'));
+  await expect(store.updateWord('word', { term: 'new', definition: null })).rejects.toThrow('offline');
+  expect(state.entries[0].word).toEqual(enriched);
+  const pending = deferred<{ ok: boolean }>();
+  sdk.deleteWord.mockReturnValueOnce(pending.promise);
+  const first = store.removeWord('word');
+  await Promise.resolve();
+  await expect(store.removeWord('word')).rejects.toThrow('already being saved');
+  pending.resolve({ ok: true }); await first;
+  expect(sdk.deleteWord).toHaveBeenCalledTimes(1);
+});
+
+it('uses the latest entry for jobs still waiting behind another word', async () => {
+  const pending = deferred<string>();
+  const started = deferred<void>();
+  const second = { ...enriched, id: 'second' };
+  disk.set('voca:deck:v1:user', JSON.stringify({ version: 1, entries: [enriched, second].map((word) => ({
+    word, enrichmentComplete: true, audioReady: false, attempts: 0, retryAt: 0,
+  })) }));
+  audio.mockImplementationOnce(() => { started.resolve(); return pending.promise; });
+  const running = store.sync(false, false);
+  await started.promise;
+  sdk.updateWord.mockResolvedValueOnce({ word: { ...second, definition: 'Updated meaning' } });
+  await store.updateWord('second', { term: second.term, definition: 'Updated meaning' });
+  pending.resolve('file:///first.mp3'); await running;
+  expect(state.entries.find((entry) => entry.word.id === 'second')).toMatchObject({
+    word: { definition: 'Updated meaning' }, audioReady: true,
+  });
+});
+
+it('reports a successful online mutation separately from a failed cache write', async () => {
+  await store.remember(enriched); await store.sync(false, false);
+  storage.setItem.mockRejectedValueOnce(new Error('full'));
+  expect(await store.removeWord('word')).toContain('Saved online');
+  expect(state.entries).toEqual([]);
+  expect(state.message).toContain('before going offline');
+});
+
+it('rejects a late mutation result after account disposal', async () => {
+  await store.remember(enriched); await store.sync(false, false);
+  const pending = deferred<{ word: Word }>();
+  sdk.updateWord.mockReturnValueOnce(pending.promise);
+  const edit = store.updateWord('word', { term: 'serene', definition: 'new' });
+  await Promise.resolve(); store.dispose();
+  pending.resolve({ word: { ...enriched, definition: 'new' } });
+  await expect(edit).rejects.toThrow('Account changed');
+  expect(state.entries[0].word.definition).toBe('Calm');
+});
+
+it('coalesces refreshes requested while a background job is running', async () => {
+  const pending = deferred<typeof result>();
+  const started = deferred<void>();
+  sdk.enrichWord.mockImplementationOnce(() => { started.resolve(); return pending.promise; });
+  await store.remember(bare); await started.promise;
+  sdk.getWords.mockResolvedValueOnce({ words: [{ ...enriched, interval: 6 }] });
+  const first = store.sync(); const second = store.sync(true);
+  pending.resolve(result); await Promise.all([first, second]);
+  expect(sdk.getWords).toHaveBeenCalledTimes(1);
+  expect(state.entries[0].word.interval).toBe(6);
 });

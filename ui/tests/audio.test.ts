@@ -1,5 +1,5 @@
 import * as FileSystem from 'expo-file-system';
-import { downloadPronunciation, getLocalPronunciationUri } from '../src/lib/audio';
+import { downloadPronunciation, getLocalPronunciationUri, removePronunciation } from '../src/lib/audio';
 
 jest.mock('expo-file-system', () => ({
   documentDirectory: 'file:///documents/', getInfoAsync: jest.fn(),
@@ -108,4 +108,24 @@ it('cancels a stalled download and allows a subsequent retry', async () => {
   expect(await getLocalPronunciationUri('user', 'word', url)).toBeNull();
   expect(await downloadPronunciation('user', 'word', url)).toBe(path);
   jest.useRealTimers();
+});
+
+it('removes both cached audio and its receipt after an in-flight download settles', async () => {
+  let finish!: () => void;
+  let started!: () => void;
+  const beginning = new Promise<void>((resolve) => { started = resolve; });
+  const original = fs.downloadAsync.getMockImplementation()!;
+  fs.downloadAsync.mockImplementationOnce((url, uri) => {
+    started();
+    return new Promise((resolve) => { finish = async () => resolve(await original(url, uri)); });
+  });
+  const downloading = downloadPronunciation('user', 'word', url);
+  await beginning;
+  const removal = removePronunciation('user', 'word');
+  finish();
+  await Promise.all([downloading, removal]);
+  expect(await getLocalPronunciationUri('user', 'word', url)).toBeNull();
+  expect(files.has(path)).toBe(false);
+  expect(files.has(path + '.json')).toBe(false);
+  expect(await downloadPronunciation('user', 'word', url + '?new')).toBe(path);
 });

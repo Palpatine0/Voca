@@ -2,7 +2,7 @@ import * as FileSystem from 'expo-file-system';
 import { Platform } from 'react-native';
 
 export const supportsOfflineAudio = Platform.OS !== 'web' && Boolean(FileSystem.documentDirectory);
-const downloads = new Map<string, Promise<string>>();
+const downloads = new Map<string, Promise<unknown>>();
 let downloadId = 0;
 
 function paths(userId: string, wordId: string) {
@@ -90,5 +90,21 @@ export function downloadPronunciation(userId: string, wordId: string, remoteUrl:
   void task.finally(() => {
     if (downloads.get(key) === task) downloads.delete(key);
   }).catch(() => undefined);
+  return task;
+}
+
+export function removePronunciation(userId: string, wordId: string): Promise<void> {
+  if (!supportsOfflineAudio) return Promise.resolve();
+  const key = `${userId}/${wordId}`;
+  const previous = downloads.get(key);
+  const task = (async () => {
+    // Wait for an in-flight download so it cannot recreate a deleted file.
+    await previous?.catch(() => undefined);
+    const { file, receipt } = paths(userId, wordId);
+    await FileSystem.deleteAsync(receipt, { idempotent: true });
+    await FileSystem.deleteAsync(file, { idempotent: true });
+  })();
+  downloads.set(key, task);
+  void task.finally(() => { if (downloads.get(key) === task) downloads.delete(key); }).catch(() => undefined);
   return task;
 }

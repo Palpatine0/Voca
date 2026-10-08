@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { createHash } from 'node:crypto';
 import { synthesizeSpeech } from '../lib/elevenlabs';
 import { supabaseAdmin, STORAGE_BUCKET } from '../lib/supabaseAdmin';
 import { findIllustrationUrl } from '../lib/unsplash';
@@ -22,13 +23,16 @@ export function createEnrichmentRouter({
     if (!word) return { status: 404, body: { error: 'word not found' } };
 
     const bucket = database.storage.from(STORAGE_BUCKET);
-    const audioPath = `${userId}/${word.id}.mp3`;
+    // A renamed word must never reuse audio generated for its old spelling.
+    const filename = `${createHash('sha256').update(word.term).digest('hex')}.mp3`;
+    const directory = `${userId}/${word.id}`;
+    const audioPath = `${directory}/${filename}`;
     const pronunciation = async () => {
       if (word.pronunciation_url) return word.pronunciation_url as string;
       // Recover a prior upload even if its database update/response was lost.
-      const { data: files, error: listError } = await bucket.list(userId, { search: `${word.id}.mp3` });
+      const { data: files, error: listError } = await bucket.list(directory, { search: filename });
       if (listError) throw listError;
-      if (!files?.some((file) => file.name === `${word.id}.mp3`)) {
+      if (!files?.some((file) => file.name === filename)) {
         const bytes = await speech(word.term);
         if (!bytes.length) throw new Error('Empty pronunciation');
         const { error: uploadError } = await bucket.upload(audioPath, bytes, {
@@ -50,8 +54,9 @@ export function createEnrichmentRouter({
     let updatedWord = word;
     if (Object.keys(updates).length) {
       const result = await database.from('words').update(updates)
-        .eq('id', wordId).eq('user_id', userId).select().single();
-      if (result.error || !result.data) return { status: 500, body: { error: 'Unable to save enrichment' } };
+        .eq('id', wordId).eq('user_id', userId).eq('term', word.term).select().maybeSingle();
+      if (result.error) return { status: 500, body: { error: 'Unable to save enrichment' } };
+      if (!result.data) return { status: 409, body: { error: 'Word changed. Refresh and retry enrichment.' } };
       updatedWord = result.data;
     }
     // Preserve either successful result and report unfinished work explicitly.

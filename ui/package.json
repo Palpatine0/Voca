@@ -18,6 +18,7 @@
     "test:review": "jest --runInBand tests/review.test.tsx tests/pronunciation.test.tsx",
     "test:offline": "jest --runInBand tests/audio.test.ts tests/deck.test.ts tests/offline-ui.test.tsx tests/api.test.ts",
     "test:ocr": "jest --runInBand tests/photo.test.ts tests/photo-import.test.tsx",
+    "test:library": "jest --runInBand tests/library.test.tsx tests/deck.test.ts tests/audio.test.ts tests/api.test.ts",
     "assets:generate": "node scripts/generate-assets.mjs"
   },
   "dependencies": {

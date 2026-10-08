@@ -84,7 +84,7 @@ it('exposes saved words and audio in Library after an offline restart', async ()
   disk.set('voca:deck:v1:user', JSON.stringify({ version: 1, entries: [{
     word: { ...word, pronunciation_url: 'https://audio.test/word.mp3' }, enrichmentComplete: true, audioReady: true, attempts: 0, retryAt: 0,
   }] }));
-  sdk.getWords.mockRejectedValueOnce(new Error('offline'));
+  sdk.getWords.mockRejectedValue(new Error('offline'));
   await mount(<LibraryScreen />);
   const screen = root.root.findAllByType(Text).map((node) => node.props.children).join('\n');
   expect(screen).toContain('serene');

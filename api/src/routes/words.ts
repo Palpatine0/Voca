@@ -107,43 +107,49 @@ export function createWordsRouter({ database = supabaseAdmin, authenticate = req
   // PATCH /words/:id — update a word
   router.patch('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { term, definition, pronunciation_url, image_url } = req.body;
-
-    const updates: Record<string, unknown> = {};
-    if (term !== undefined) updates.term = term.trim();
-    if (definition !== undefined) updates.definition = definition?.trim() || null;
-    if (pronunciation_url !== undefined) updates.pronunciation_url = pronunciation_url;
-    if (image_url !== undefined) updates.image_url = image_url;
-
-    if (Object.keys(updates).length === 0) {
-      return res.status(400).json({ error: 'no fields to update' });
+    const { term, definition } = req.body ?? {};
+    if (term !== undefined && (typeof term !== 'string' || !term.trim() || term.trim().length > 200)) {
+      return res.status(400).json({ error: 'Enter a word between 1 and 200 characters.' });
     }
-
-    const { data, error } = await database
-      .from('words')
-      .update(updates)
-      .eq('id', id)
-      .eq('user_id', req.userId!)
-      .select()
-      .single();
-
-    if (error) return res.status(500).json({ error: error.message });
-    if (!data) return res.status(404).json({ error: 'not_found' });
-    res.json({ word: data });
+    if (definition !== undefined && definition !== null && (typeof definition !== 'string' || definition.length > 4000)) {
+      return res.status(400).json({ error: 'Keep the definition under 4,000 characters.' });
+    }
+    if (term === undefined && definition === undefined) return res.status(400).json({ error: 'No fields to update.' });
+    try {
+      const existing = await database.from('words').select('*').eq('id', id).eq('user_id', req.userId!).maybeSingle();
+      if (existing.error) return res.status(500).json({ error: 'Unable to load word. Please try again.' });
+      if (!existing.data) return res.status(404).json({ error: 'Word no longer exists.' });
+      const updates: Record<string, unknown> = {};
+      if (definition !== undefined) updates.definition = definition?.trim() || null;
+      if (term !== undefined) {
+        updates.term = term.trim();
+        if (updates.term !== existing.data.term) {
+          updates.pronunciation_url = null;
+          updates.image_url = null;
+        }
+      }
+      // Change only editable fields; keep SM-2 progress and protect concurrent renames.
+      const { data, error } = await database.from('words').update(updates)
+        .eq('id', id).eq('user_id', req.userId!).eq('term', existing.data.term).select().maybeSingle();
+      if (error) return res.status(500).json({ error: 'Unable to save word. Please try again.' });
+      if (!data) return res.status(409).json({ error: 'Word changed elsewhere. Refresh Library and try again.' });
+      res.json({ word: data });
+    } catch {
+      res.status(500).json({ error: 'Unable to save word. Please try again.' });
+    }
   });
 
   // DELETE /words/:id — remove a word
   router.delete('/:id', async (req: Request, res: Response) => {
     const { id } = req.params;
 
-    const { error } = await database
-      .from('words')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', req.userId!);
-
-    if (error) return res.status(500).json({ error: error.message });
-    res.json({ ok: true });
+    try {
+      const { error } = await database.from('words').delete().eq('id', id).eq('user_id', req.userId!);
+      if (error) return res.status(500).json({ error: 'Unable to remove word. Please try again.' });
+      res.json({ ok: true });
+    } catch {
+      res.status(500).json({ error: 'Unable to remove word. Please try again.' });
+    }
   });
 
   return router;

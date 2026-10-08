@@ -3,6 +3,7 @@ import { test, mock } from 'node:test';
 import type { TestContext } from 'node:test';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
+import { createHash } from 'node:crypto';
 
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only';
@@ -42,6 +43,7 @@ async function fixture(t: TestContext) {
           filters.push(where);
           if (failRead) return { data: null, error: new Error('database unavailable') };
           if (where.user_id !== word.user_id || where.id !== word.id) return { data: null, error: null };
+          if (where.term !== undefined && where.term !== word.term) return { data: null, error: null };
           if (updates && failUpdate) return { data: null, error: new Error('database unavailable') };
           if (updates) word = { ...word, ...updates };
           return { data: { ...word }, error: null };
@@ -78,6 +80,8 @@ async function fixture(t: TestContext) {
   };
   return {
     post, files, speech, illustration, bucket, filters,
+    rename: (term: string) => { word = { ...word, term, pronunciation_url: null, image_url: null }; },
+    currentWord: () => word,
     whenRequests: (count: number) => requests >= count ? Promise.resolve() : new Promise<void>((resolve) => requestWaiters.set(count, resolve)),
     setFailures: (options: { update?: boolean; image?: boolean; speech?: boolean; upload?: boolean; read?: boolean }) => {
       failUpdate = options.update ?? false; failImage = options.image ?? false;
@@ -126,7 +130,7 @@ test('recovers an uploaded MP3 after a failed database write without another TTS
   const f = await fixture(t);
   f.setFailures({ update: true });
   assert.equal((await f.post()).status, 500);
-  assert.ok(f.files.has('word.mp3'));
+  assert.ok(f.files.has(`${createHash('sha256').update('serene').digest('hex')}.mp3`));
   f.setFailures({});
   assert.equal((await f.post()).body.enrichment_pending, false);
   assert.equal(f.speech.mock.callCount(), 1);
@@ -172,4 +176,22 @@ test('reports a database outage as retryable instead of deleting a supposedly mi
   f.setFailures({ read: true });
   assert.equal((await f.post()).status, 500);
   assert.equal(f.speech.mock.callCount(), 0);
+});
+
+test('renaming uses a different audio object and does not restore media from an older job', async (t) => {
+  const f = await fixture(t);
+  let finish!: (bytes: Buffer) => void;
+  let started!: () => void;
+  const working = new Promise<void>((resolve) => { started = resolve; });
+  f.speech.mock.mockImplementationOnce(() => { started(); return new Promise((resolve) => { finish = resolve; }); });
+  const old = f.post();
+  await working;
+  f.rename('tranquil');
+  finish(Buffer.from('old audio'));
+  assert.equal((await old).status, 409);
+  assert.equal(f.currentWord().pronunciation_url, null);
+  assert.equal((await f.post()).status, 200);
+  assert.equal(f.speech.mock.callCount(), 2);
+  assert.equal(f.files.size, 2);
+  assert.equal(f.currentWord().term, 'tranquil');
 });

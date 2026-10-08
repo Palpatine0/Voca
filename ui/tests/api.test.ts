@@ -11,6 +11,8 @@ it('does not submit an old account job with a new account token', async () => {
   jest.mocked(supabase.auth.getSession).mockResolvedValue({ data: { session: { user: { id: 'new-user' }, access_token: 'token' } }, error: null } as never);
   const fetch = jest.spyOn(global, 'fetch');
   await expect(api.enrichWord('word', 'old-user')).rejects.toMatchObject({ status: 401 });
+  await expect(api.updateWord('word', { definition: 'test' }, 'old-user')).rejects.toMatchObject({ status: 401 });
+  await expect(api.deleteWord('word', 'old-user')).rejects.toMatchObject({ status: 401 });
   expect(fetch).not.toHaveBeenCalled();
 });
 

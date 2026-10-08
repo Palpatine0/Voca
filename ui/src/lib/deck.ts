@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, ApiError, Word } from './api';
-import { downloadPronunciation, getLocalPronunciationUri, supportsOfflineAudio } from './audio';
+import { downloadPronunciation, getLocalPronunciationUri, removePronunciation, supportsOfflineAudio } from './audio';
 
 export interface SavedWord {
   word: Word;
@@ -32,7 +32,11 @@ export class DeckStore {
   private hydration?: Promise<void>;
   private writes: Promise<void> = Promise.resolve();
   private running?: Promise<void>;
+  private queuedRefresh?: Promise<void>;
+  private forceQueuedRefresh = false;
   private key: string;
+  private revisions = new Map<string, number>();
+  private mutating = new Set<string>();
 
   constructor(readonly userId: string, private onChange: (state: DeckState) => void) {
     this.key = `voca:deck:v1:${userId}`;
@@ -93,8 +97,94 @@ export class DeckStore {
     void this.sync(false, false);
   }
 
+  private revision(id: string) { return this.revisions.get(id) ?? 0; }
+  private bump(id: string) { this.revisions.set(id, this.revision(id) + 1); }
+  private unchanged(id: string, revision: number) {
+    return this.active && !this.mutating.has(id) && this.revision(id) === revision;
+  }
+
+  private beginMutation(id: string) {
+    if (!this.active) throw new Error('Account changed. Please try again.');
+    if (this.mutating.has(id)) throw new Error('This word is already being saved.');
+    const entry = this.state.entries.find((item) => item.word.id === id);
+    if (!entry) throw new Error('Word no longer exists. Refresh Library.');
+    this.mutating.add(id);
+    this.bump(id);
+    return entry;
+  }
+
+  private async saveMutation(change: (entries: SavedWord[]) => SavedWord[]) {
+    try {
+      await this.commit(change);
+      return null;
+    } catch {
+      const warning = 'Saved online, but this device could not update its saved words. Free up storage and refresh Library before going offline.';
+      // The server succeeded. Reflect that result without pretending the stale
+      // on-disk cache is current, and do not offer a duplicate remote mutation.
+      this.publish({ entries: change(this.state.entries), message: warning });
+      return warning;
+    }
+  }
+
+  private clearAudio(id: string) {
+    void removePronunciation(this.userId, id).catch(() => {
+      this.publish({ message: 'Word saved, but old audio could not be removed from this device.' });
+    });
+  }
+
+  async updateWord(id: string, updates: Pick<Word, 'term' | 'definition'>): Promise<string | null> {
+    await this.load();
+    const previous = this.beginMutation(id);
+    let resume = false;
+    try {
+      const { word } = await api.updateWord(id, updates, this.userId);
+      if (!this.active || word.user_id !== this.userId || word.id !== id) throw new Error('Account changed. Please try again.');
+      const changedTerm = previous.word.term !== word.term;
+      const warning = await this.saveMutation((entries) => entries.map((entry) => entry.word.id !== id ? entry :
+        changedTerm ? newEntry(word) : {
+          ...entry, word,
+          enrichmentComplete: Boolean(word.pronunciation_url) && (entry.enrichmentComplete || Boolean(word.image_url)),
+          audioReady: entry.audioReady && entry.word.pronunciation_url === word.pronunciation_url,
+        }));
+      if (changedTerm) this.clearAudio(id);
+      resume = !warning;
+      return warning;
+    } finally {
+      this.mutating.delete(id);
+      this.bump(id);
+      if (resume) void this.sync(false, false);
+    }
+  }
+
+  async removeWord(id: string): Promise<string | null> {
+    await this.load();
+    this.beginMutation(id);
+    try {
+      await api.deleteWord(id, this.userId);
+      if (!this.active) throw new Error('Account changed. Please try again.');
+      const warning = await this.saveMutation((entries) => entries.filter((entry) => entry.word.id !== id));
+      this.clearAudio(id);
+      return warning;
+    } finally {
+      this.mutating.delete(id);
+      this.bump(id);
+    }
+  }
+
   sync(force = false, refresh = true): Promise<void> {
-    if (this.running) return this.running;
+    if (this.running) {
+      if (!refresh) return this.running;
+      this.forceQueuedRefresh ||= force;
+      if (!this.queuedRefresh) {
+        this.queuedRefresh = this.running.then(() => {
+          const forceNext = this.forceQueuedRefresh;
+          this.forceQueuedRefresh = false;
+          this.queuedRefresh = undefined;
+          return this.sync(forceNext, true);
+        });
+      }
+      return this.queuedRefresh;
+    }
     const run = this.run(force, refresh);
     this.running = run;
     void run.finally(() => { if (this.running === run) this.running = undefined; }).catch(() => undefined);
@@ -109,15 +199,17 @@ export class DeckStore {
     try {
       if (refresh) {
         const beforeFetch = new Set(this.state.entries.map((entry) => entry.word.id));
+        const versions = new Map(this.revisions);
         try {
           const { words } = await api.getWords(this.userId);
           if (!this.active) return;
           if (words.some((word) => word.user_id !== this.userId)) throw new Error('Account mismatch');
           await this.commit((entries) => {
+            const changed = (id: string) => !this.unchanged(id, versions.get(id) ?? 0);
             const previous = new Map(entries.map((entry) => [entry.word.id, entry]));
             const remoteIds = new Set(words.map((word) => word.id));
             return [
-              ...words.map((word) => {
+              ...words.filter((word) => !changed(word.id)).map((word) => {
                 const old = previous.get(word.id);
                 if (!old || old.word.term !== word.term) return newEntry(word);
                 return {
@@ -127,7 +219,7 @@ export class DeckStore {
                 };
               }),
               // Do not erase a word added while the list request was in flight.
-              ...entries.filter((entry) => !beforeFetch.has(entry.word.id) && !remoteIds.has(entry.word.id)),
+              ...entries.filter((entry) => changed(entry.word.id) || (!beforeFetch.has(entry.word.id) && !remoteIds.has(entry.word.id))),
             ];
           });
         } catch (error) {
@@ -135,38 +227,45 @@ export class DeckStore {
           this.publish({ message: 'Could not refresh. Showing words saved on this device.' });
         }
       }
-      for (const entry of this.state.entries) {
+      for (const id of this.state.entries.map((entry) => entry.word.id)) {
         if (!this.active) return;
+        // An earlier job may have awaited while this word was edited/deleted.
+        const entry = this.state.entries.find((item) => item.word.id === id);
+        if (!entry) continue;
+        const version = this.revision(entry.word.id);
+        const currentJob = () => this.unchanged(entry.word.id, version);
+        if (!currentJob()) continue;
         if (!needsWork(entry) || (!force && entry.retryAt > Date.now())) continue;
         try {
           let current = entry;
           if (!current.enrichmentComplete) {
             const result = await api.enrichWord(current.word.id, this.userId);
-            if (!this.active) return;
+            if (!currentJob()) continue;
             if (result.word.user_id !== this.userId || result.word.id !== current.word.id) throw new Error('Account mismatch');
             current = {
               ...current, word: result.word,
               enrichmentComplete: !result.enrichment_pending && Boolean(result.word.pronunciation_url),
               audioReady: current.audioReady && current.word.pronunciation_url === result.word.pronunciation_url,
             };
-            await this.replace(current);
+            await this.replace(current, version);
           }
+          if (!currentJob()) continue;
           if (supportsOfflineAudio && !current.audioReady && current.word.pronunciation_url) {
             await downloadPronunciation(this.userId, current.word.id, current.word.pronunciation_url);
-            if (!this.active) return;
+            if (!currentJob()) continue;
             current = { ...current, audioReady: true };
-            await this.replace(current);
+            await this.replace(current, version);
           }
           if (needsWork(current)) throw new Error('Enrichment incomplete');
-          await this.replace({ ...current, attempts: 0, retryAt: 0 });
+          await this.replace({ ...current, attempts: 0, retryAt: 0 }, version);
         } catch (error) {
-          if (!this.active) return;
+          if (!currentJob()) continue;
           if (error instanceof ApiError && error.status === 401) return;
           if (error instanceof ApiError && error.status === 404) {
-            await this.commit((entries) => entries.filter((item) => item.word.id !== entry.word.id));
+            await this.commit((entries) => currentJob() ? entries.filter((item) => item.word.id !== entry.word.id) : entries);
             continue;
           }
-          await this.commit((entries) => entries.map((item) => item.word.id !== entry.word.id ? item : {
+          await this.commit((entries) => entries.map((item) => !currentJob() || item.word.id !== entry.word.id ? item : {
             ...item, attempts: item.attempts + 1,
             retryAt: Date.now() + Math.min(15 * 60_000, 15_000 * 2 ** Math.min(item.attempts, 6)),
           }));
@@ -179,8 +278,8 @@ export class DeckStore {
     }
   }
 
-  private replace(entry: SavedWord) {
-    return this.commit((entries) => entries.map((item) => item.word.id === entry.word.id ? entry : item));
+  private replace(entry: SavedWord, revision: number) {
+    return this.commit((entries) => entries.map((item) => this.unchanged(entry.word.id, revision) && item.word.id === entry.word.id ? entry : item));
   }
 
   dispose() { this.active = false; }

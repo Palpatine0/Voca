@@ -7,6 +7,8 @@ import { useAuth } from './AuthContext';
 interface DeckContextValue extends DeckState {
   remember: (word: Word) => Promise<void>;
   refresh: (force?: boolean) => Promise<void>;
+  updateWord: (id: string, updates: Pick<Word, 'term' | 'definition'>) => Promise<string | null>;
+  removeWord: (id: string) => Promise<string | null>;
 }
 const DeckContext = createContext<DeckContextValue | null>(null);
 
@@ -40,9 +42,17 @@ export function DeckProvider({ children }: { children: React.ReactNode }) {
     await current.current.remember(word);
   }, []);
   const refresh = useCallback((force = false) => current.current?.sync(force) ?? Promise.resolve(), []);
+  const updateWord = useCallback(async (id: string, updates: Pick<Word, 'term' | 'definition'>) => {
+    if (!current.current) throw new Error('Deck is not ready');
+    return current.current.updateWord(id, updates);
+  }, []);
+  const removeWord = useCallback(async (id: string) => {
+    if (!current.current) throw new Error('Deck is not ready');
+    return current.current.removeWord(id);
+  }, []);
 
   return (
-    <DeckContext.Provider value={{ ...state, remember, refresh }}>
+    <DeckContext.Provider value={{ ...state, remember, refresh, updateWord, removeWord }}>
       {children}
     </DeckContext.Provider>
   );

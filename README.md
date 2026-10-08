@@ -141,6 +141,7 @@ From the repository root, after installing both packages:
 npm --prefix api run test:setup
 npm --prefix api run test:enrich
 npm --prefix api run test:ocr
+npm --prefix api run test:library
 npm --prefix api run build
 npm --prefix ui run typecheck
 npm --prefix ui test
@@ -212,6 +213,40 @@ and providers; no credentials or paid requests are needed. For a device check,
 add a word, wait for **Pronunciation saved offline** in Library, enable airplane
 mode, restart Voca, and play it. Interrupt another word's download, restore the
 connection, and use **Refresh and retry** to verify recovery.
+
+## Library
+
+Library searches saved words and definitions without a connection. Filter by
+**Due now** or **Downloaded** (mobile only), and switch between newest-first and
+alphabetical order. Review dates refresh when you return to Library. Search and
+filter empty states are distinct from an empty deck.
+
+Tap a word to open its details, edit its spelling or definition, view its
+illustration, and play its pronunciation. Editing and deletion require an API
+connection; failed saves keep your changes visible for retry. Removing a word
+requires a confirmation and removes its review history and the current device's
+offline audio. Previously generated server audio objects are not purged by this
+operation, and another offline device retains its cache until it refreshes.
+
+Definition edits preserve review history and downloaded audio. Renaming preserves
+the SM-2 schedule but clears the old media URLs and queues new enrichment. New
+audio uploads use a term-specific path (`user/word/sha256(term).mp3`) so renamed
+words cannot reuse an old pronunciation. Existing saved URLs continue to work.
+Enrichment writes check that the term still matches; late jobs cannot restore old
+media after a rename. The API and UI should be deployed together.
+
+Local edits/deletes invalidate older refresh and enrichment results. Audio cleanup
+waits for downloads in progress, preventing a completed download from recreating
+a deleted file. If an online save succeeds but local storage fails, Library shows
+the server result and warns that its offline cache needs repair before going
+offline. Refresh requests made during a background job run after it finishes.
+
+`npm --prefix ui run test:library` covers search, filters, sorting, failed edits,
+deletion confirmation, cache races, account changes, and audio cleanup.
+`npm --prefix api run test:library` covers ownership, validation, progress
+preservation, deletion retries, and enrichment during renames. Tests use local
+fixtures; live Supabase, device playback, and native keyboard layouts still need
+device checks.
 
 ## Photo import
 
