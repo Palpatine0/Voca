@@ -1,3 +1,4 @@
+import { webFormContent } from '../../src/lib/layout';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useRef, useState } from 'react';
 import {
@@ -90,7 +91,7 @@ export default function AddScreen() {
         style={styles.flex}
       >
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, webFormContent]}
           keyboardShouldPersistTaps="handled"
         >
           <View style={styles.header}>

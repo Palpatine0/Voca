@@ -1,3 +1,4 @@
+import { webContent } from '../../src/lib/layout';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
@@ -43,7 +44,7 @@ export function LibraryContent({ deck, focused }: { deck: ReturnType<typeof useD
   }, [focused, deck.refresh]);
 
   return <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]}>
-    <FlatList contentContainerStyle={styles.content} data={entries} keyExtractor={(entry) => entry.word.id}
+    <FlatList contentContainerStyle={[styles.content, webContent]} data={entries} keyExtractor={(entry) => entry.word.id}
       keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
       refreshing={deck.syncing} onRefresh={() => void deck.refresh(true)}
       ListHeaderComponent={<View style={styles.header}>

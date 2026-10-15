@@ -1,6 +1,7 @@
+import { webFormContent } from '../../src/lib/layout';
 import { router, useFocusEffect } from 'expo-router';
 import React, { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { FlashCard } from '../../src/components/FlashCard';
@@ -153,7 +154,7 @@ export default function ReviewScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]}>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={[styles.container, webFormContent]}>
         {/* Progress */}
         <View style={styles.progressRow}>
           <Pressable onPress={() => router.replace('/(tabs)')}>
@@ -191,7 +192,7 @@ export default function ReviewScreen() {
           </Text>
           <RatingButtons onRate={handleRate} disabled={submitting} />
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -206,7 +207,7 @@ const styles = StyleSheet.create({
     paddingBottom: TAB_DOCK_CLEARANCE,
   },
   container: {
-    flex: 1,
+    flexGrow: 1,
     paddingHorizontal: spacing.lg,
     paddingBottom: TAB_DOCK_CLEARANCE,
   },
@@ -218,6 +219,8 @@ const styles = StyleSheet.create({
   },
   cardArea: {
     flex: 1,
+    minHeight: 320,
+    paddingVertical: spacing.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },

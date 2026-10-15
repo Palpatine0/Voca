@@ -1,7 +1,12 @@
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, Session } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from './config';
+import { readAuthCallback } from './authLinks';
+
+export const initialAuthCallback = Platform.OS === 'web' && typeof window !== 'undefined'
+  ? readAuthCallback(window.location.href) : { hasCallback: false, recovery: false };
 
 // Match Supabase's existing default key so previously saved sessions still work.
 const storageKey = `sb-${new URL(SUPABASE_URL).hostname.split('.')[0]}-auth-token`;
@@ -21,6 +26,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     storageKey,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    detectSessionInUrl: Platform.OS === 'web',
   },
 });

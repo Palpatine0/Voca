@@ -1,5 +1,6 @@
+import { webFormContent } from '../../src/lib/layout';
 import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
@@ -22,7 +23,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]}>
-      <View style={styles.container}>
+      <ScrollView contentContainerStyle={[styles.container, webFormContent]}>
         <Text style={[typography.titleMd, { color: theme.colors.ink }]}>
           Settings
         </Text>
@@ -71,7 +72,7 @@ export default function SettingsScreen() {
             </Text>
           )}
         </Pressable>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
@@ -79,7 +80,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   container: {
-    flex: 1,
+    flexGrow: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: spacing.lg,

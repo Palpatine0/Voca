@@ -52,6 +52,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   input: {
+    width: '100%',
     minHeight: 44,
     borderWidth: 1,
     borderRadius: radii.md,

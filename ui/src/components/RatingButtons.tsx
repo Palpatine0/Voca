@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { radii, spacing, typography, useTheme } from '../lib/theme';
 
 interface RatingButtonsProps {
@@ -16,6 +16,7 @@ const RATINGS = [
 
 export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
   const theme = useTheme();
+  const compact = useWindowDimensions().width < 540;
 
   return (
     <View style={styles.container}>
@@ -28,6 +29,7 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
           disabled={disabled}
           style={({ pressed }) => [
             styles.button,
+            compact && styles.compactButton,
             {
               backgroundColor: pressed
                 ? theme.colors.surfaceStrong
@@ -43,7 +45,7 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
           <Text
             style={[
               typography.caption,
-              { color: theme.colors.mutedSoft, marginTop: 2 },
+              { color: theme.colors.mutedSoft, marginTop: 2, textAlign: 'center' },
             ]}
           >
             {sublabel}
@@ -57,8 +59,10 @@ export function RatingButtons({ onRate, disabled }: RatingButtonsProps) {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
   },
+  compactButton: { flexBasis: '44%' },
   button: {
     flex: 1,
     alignItems: 'center',

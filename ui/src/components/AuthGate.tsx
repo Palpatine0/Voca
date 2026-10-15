@@ -12,7 +12,7 @@ export function AuthGate({
   authenticated?: boolean;
   children: React.ReactNode;
 }) {
-  const { bootstrapped, session, sessionError, retrySession } = useAuth();
+  const { bootstrapped, session, sessionError, retrySession, passwordRecovery } = useAuth();
   const theme = useTheme();
 
   if (!bootstrapped) {
@@ -38,6 +38,7 @@ export function AuthGate({
     );
   }
 
+  if (passwordRecovery && session) return <Redirect href="/reset-password" />;
   if (authenticated && !session) return <Redirect href="/(auth)/login" />;
   if (!authenticated && session) return <Redirect href="/(tabs)" />;
 

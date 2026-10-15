@@ -164,6 +164,30 @@ directly. Saved credentials should restore the session; signed-out users should
 always land on login. A restore failure shows a retry action without clearing
 stored credentials. Sign Out affects the current session only.
 
+### Password recovery and browser layout
+
+The sign-in screen links to `/forgot-password`. Supabase sends the recovery email
+and returns the user to `/reset-password`, where the app validates the session
+before allowing a new password. Invalid or expired links offer a fresh request;
+failed email/password requests keep the form available for retry. Browser auth
+callbacks are consumed by Supabase, including email confirmation links. Native
+password-reset emails open the production web page; users can then sign in to
+the native app with their new password.
+
+In Supabase **Authentication → URL Configuration**, keep Site URL set to
+`https://voca0.vercel.app` and allow the exact redirect
+`https://voca0.vercel.app/reset-password` (configured October 14, 2026). For another
+deployment or local email testing, add that origin's `/reset-password` URL too.
+Email delivery still depends on Supabase's email/SMTP configuration and limits.
+The auth tests simulate email requests, valid recovery, expired links, and password
+updates; they do not prove delivery to an inbox.
+
+Authentication forms use a centered 460px maximum width with labeled fields,
+autocomplete, Enter submission, and scrolling on short screens. Home and Library
+cap content at 960px on the web; Add, Review, and Settings cap at 680px. Review
+controls scroll above the navigation dock and switch to two columns on narrow
+screens. Web pronunciation remains online-only as described below.
+
 The review tests cover failed loads and saves, retrying the same card, rapid
 rating taps, fresh queues/counts after tab navigation, overlapping requests, and
 resetting each card. Pronunciation tests check playback cleanup when a card

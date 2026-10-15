@@ -130,6 +130,7 @@ export function FlashCard({ word }: FlashCardProps) {
 const styles = StyleSheet.create({
   wrapper: {
     width: '100%',
+    maxWidth: 360,
     aspectRatio: 3 / 4,
     maxHeight: 420,
   },
