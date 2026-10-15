@@ -16,7 +16,7 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://voca-api.koyeb.app"
+        "EXPO_PUBLIC_API_URL": "https://voca-api-carrion-spike-2eaa6bca.koyeb.app"
       },
       "android": {
         "buildType": "apk"
@@ -25,7 +25,7 @@
     "production": {
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://voca-api.koyeb.app"
+        "EXPO_PUBLIC_API_URL": "https://voca-api-carrion-spike-2eaa6bca.koyeb.app"
       },
       "android": {
         "buildType": "apk"

@@ -327,12 +327,28 @@ deployments, link the repository root with
 `vercel link --project voca --scope sethmccarthys-projects`, then run
 `vercel deploy --prod --scope sethmccarthys-projects` from that same root.
 
-Koyeb builds `api/Dockerfile` from an uploaded source snapshot. The upload
-contains only `src`, `package.json`, `package-lock.json`, `tsconfig.json`,
-`Dockerfile`, and `.dockerignore`; local environment files are excluded. The
-server uses the `voca-supabase-service-role` Koyeb secret for its Supabase key.
-Git pushes do not automatically deploy this snapshot; upload a new filtered
-snapshot to `voca-api/voca-api` when the API changes.
+Koyeb uses the same deployment layout as Thread: GitHub repository
+`Palpatine0/Voca`, branch `main`, work directory `api`, Docker builder, and
+`Dockerfile` relative to that directory. Autodeploy is enabled. Voca keeps
+Node 22 for its dependencies, a free instance in `was`, port 8080, and an HTTP
+health check at `/health`. The server uses the `voca-supabase-service-role`
+Koyeb secret for its Supabase key.
+
+After pushing changes to `main`, both hosts build from GitHub. To reapply the
+API hosting settings and deploy the latest remote `main` manually, use an
+authenticated Koyeb CLI from the repository root:
+
+```bash
+bash scripts/deploy-api.sh
+```
+
+This updates the existing `voca-api/voca-api` service and preserves its managed
+environment variables and secrets. It does not upload local files. GitHub access
+to `Palpatine0/Voca` must be granted to the Koyeb integration. The tracked
+`ui/vercel.json`, `api/Dockerfile`, `api/.dockerignore`, and deployment script
+contain the reusable hosting setup; the Vercel Root Directory remains a project
+setting. See Koyeb's [GitHub deployment documentation](https://www.koyeb.com/docs/build-and-deploy/deploy-with-git)
+for integration setup and autodeploy behavior.
 
 Supabase's Auth Site URL is the production Vercel URL, so default confirmation
 links return to the live app. Email confirmation remains enabled.
