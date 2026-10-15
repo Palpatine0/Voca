@@ -26,7 +26,7 @@ const bare: Word = {
   pronunciation_url: null, image_url: null, easiness_factor: 2.5, interval: 0,
   repetitions: 0, next_review_at: '2026-10-07T00:00:00Z', last_reviewed_at: null, created_at: '2026-10-07T00:00:00Z',
 };
-const enriched = { ...bare, pronunciation_url: 'https://example.com/audio.mp3', image_url: 'https://example.com/image.jpg' };
+const enriched = { ...bare, enrichment: { version: 1, definition_status: 'ready' as const, image_status: 'ready' as const }, pronunciation_url: 'https://example.com/audio.mp3', image_url: 'https://example.com/image.jpg' };
 const result = { word: enriched, enrichment_pending: false, pronunciation_available: true, image_available: true };
 let state: DeckState;
 let store: DeckStore;
@@ -274,4 +274,23 @@ it('coalesces refreshes requested while a background job is running', async () =
   pending.resolve(result); await Promise.all([first, second]);
   expect(sdk.getWords).toHaveBeenCalledTimes(1);
   expect(state.entries[0].word.interval).toBe(6);
+});
+
+it('repairs an old completed cache that has a photo but no definition', async () => {
+  disk.set('voca:deck:v1:user', JSON.stringify({ version: 1, entries: [{
+    word: { ...enriched, definition: null, enrichment: undefined }, enrichmentComplete: true,
+    audioReady: true, attempts: 6, retryAt: Date.now() + 900000,
+  }] }));
+  await store.sync(false, false);
+  expect(sdk.enrichWord).toHaveBeenCalledWith('word', 'user');
+  expect(state.entries[0].word.definition).toBe('Calm');
+});
+
+it('a later audio failure does not discard a completed definition or cause duplicate image work', async () => {
+  sdk.enrichWord.mockResolvedValueOnce({ ...result, word: { ...enriched, pronunciation_url: null }, enrichment_pending: true, pronunciation_available: false });
+  await store.remember(bare);
+  await store.sync(false, false);
+  expect(state.entries[0].word.definition).toBe('Calm');
+  expect(state.entries[0].word.enrichment?.image_status).toBe('ready');
+  expect(state.entries[0].enrichmentComplete).toBe(false);
 });

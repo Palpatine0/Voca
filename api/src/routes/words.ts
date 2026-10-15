@@ -121,11 +121,22 @@ export function createWordsRouter({ database = supabaseAdmin, authenticate = req
       if (!existing.data) return res.status(404).json({ error: 'Word no longer exists.' });
       const updates: Record<string, unknown> = {};
       if (definition !== undefined) updates.definition = definition?.trim() || null;
+      if (definition !== undefined && updates.definition !== existing.data.definition) {
+        updates.enrichment = {
+          ...existing.data.enrichment,
+          definition_status: updates.definition ? 'ready' : 'pending',
+          definition_source: null,
+          image_status: 'pending',
+        };
+      }
       if (term !== undefined) {
         updates.term = term.trim();
         if (updates.term !== existing.data.term) {
           updates.pronunciation_url = null;
           updates.image_url = null;
+          updates.enrichment = null;
+          if (existing.data.enrichment?.definition_source &&
+              (definition === undefined || updates.definition === existing.data.definition)) updates.definition = null;
         }
       }
       // Change only editable fields; keep SM-2 progress and protect concurrent renames.

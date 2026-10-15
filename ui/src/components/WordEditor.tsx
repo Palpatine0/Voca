@@ -9,6 +9,7 @@ import { radii, spacing, typography, useTheme } from '../lib/theme';
 import { Button } from './Button';
 import { PronunciationButton } from './PronunciationButton';
 import { TextInput } from './TextInput';
+import { WordSources } from './WordSources';
 
 interface Props {
   word: Word;
@@ -76,6 +77,7 @@ export function WordEditor({ word, updateWord, removeWord, onClose, onSaved }: P
           <TextInput label="Word" value={term} onChangeText={setTerm} autoCapitalize="none" autoCorrect={false} editable={!busy && !confirmDelete} maxLength={200} />
           <TextInput label="Definition" value={definition} onChangeText={setDefinition} multiline textAlignVertical="top"
             placeholder="What does it mean?" editable={!busy && !confirmDelete} maxLength={4000} style={styles.definition} />
+          {!dirty && <WordSources word={word} />}
           {renamed && <Text style={[typography.caption, { color: theme.colors.muted }]}>Changing the word refreshes its pronunciation and illustration. Your review schedule stays the same.</Text>}
           {!renamed && !busy && !confirmDelete && word.pronunciation_url && <PronunciationButton userId={word.user_id} wordId={word.id} audioUrl={word.pronunciation_url} />}
           {error && <Text accessibilityRole="alert" style={[typography.caption, { color: theme.colors.semanticError }]}>{error}</Text>}

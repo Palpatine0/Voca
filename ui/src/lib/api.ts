@@ -54,6 +54,13 @@ export interface Word {
   definition: string | null;
   pronunciation_url: string | null;
   image_url: string | null;
+  enrichment?: {
+    version?: number;
+    definition_status?: 'pending' | 'ready' | 'not_found';
+    image_status?: 'pending' | 'ready' | 'not_found';
+    definition_source?: { name: string; url: string; license: string; license_url: string } | null;
+    image_source?: { name: string; url: string; photographer: string; photographer_url: string } | null;
+  } | null;
   easiness_factor: number;
   interval: number;
   repetitions: number;

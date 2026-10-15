@@ -59,10 +59,10 @@ test('editing a definition preserves media and review progress; renaming invalid
   const f = await fixture(t);
   const first = await f.request({ definition: ' Peaceful ', repetitions: 99 });
   assert.equal(first.status, 200);
-  assert.deepEqual(first.body.word, { ...f.original, definition: 'Peaceful' });
+  assert.deepEqual(first.body.word, { ...f.original, definition: 'Peaceful', enrichment: { definition_status: 'ready', definition_source: null, image_status: 'pending' } });
   const renamed = await f.request({ term: ' tranquil ', definition: '' });
   assert.equal(renamed.status, 200);
-  assert.deepEqual(renamed.body.word, { ...f.original, term: 'tranquil', definition: null, pronunciation_url: null, image_url: null });
+  assert.deepEqual(renamed.body.word, { ...f.original, term: 'tranquil', definition: null, pronunciation_url: null, image_url: null, enrichment: null });
   assert.deepEqual((await f.request({ term: 'tranquil', definition: '' })).body, renamed.body);
 });
 

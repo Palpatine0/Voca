@@ -11,7 +11,7 @@ const routerModule = import('../src/routes/enrich');
 
 async function fixture(t: TestContext) {
   const { createEnrichmentRouter } = await routerModule;
-  let word = { id: 'word', user_id: 'user', term: 'serene', pronunciation_url: null as string | null, image_url: null as string | null };
+  let word = { id: 'word', user_id: 'user', term: 'serene', definition: null as string | null, enrichment: null as Record<string, any> | null, pronunciation_url: null as string | null, image_url: null as string | null };
   const files = new Set<string>();
   let failUpdate = false;
   let failImage = false;
@@ -19,7 +19,8 @@ async function fixture(t: TestContext) {
   let failUpload = false;
   let failRead = false;
   const speech = mock.fn(async () => { if (failSpeech) throw new Error('speech unavailable'); return Buffer.from('mp3'); });
-  const illustration = mock.fn(async (): Promise<string | null> => { if (failImage) throw new Error('image unavailable'); return 'https://image.test/photo.jpg'; });
+  const definition = mock.fn(async () => ({ text: 'Calm, peaceful, unruffled', source: { name: 'Wiktionary', url: 'https://en.wiktionary.org/wiki/serene', license: 'CC BY-SA 4.0', license_url: 'https://creativecommons.org/licenses/by-sa/4.0/' } }));
+  const illustration = mock.fn(async (): Promise<import('../src/lib/unsplash').Illustration | null> => { if (failImage) throw new Error('image unavailable'); return { url: 'https://images.unsplash.com/photo-test', source: { name: 'Unsplash', url: 'https://unsplash.com/photos/test', photographer: 'Photographer', photographer_url: 'https://unsplash.com/@test' } }; });
   const bucket = {
     list: mock.fn(async () => ({ data: [...files].map((name) => ({ name })), error: null })),
     upload: mock.fn(async (path: string) => {
@@ -29,21 +30,23 @@ async function fixture(t: TestContext) {
     }),
     getPublicUrl: () => ({ data: { publicUrl: 'https://audio.test/word.mp3' } }),
   };
-  const filters: Array<Record<string, string>> = [];
+  const filters: Array<Record<string, string | null>> = [];
   const database = {
     storage: { from: () => bucket },
     from: () => {
-      const where: Record<string, string> = {};
+      const where: Record<string, string | null> = {};
       let updates: object | null = null;
       const query = {
         select: () => query,
         eq: (key: string, value: string) => { where[key] = value; return query; },
+        is: (key: string, value: null) => { where[key] = value; return query; },
         update: (value: object) => { updates = value; return query; },
         single: async () => {
           filters.push(where);
           if (failRead) return { data: null, error: new Error('database unavailable') };
           if (where.user_id !== word.user_id || where.id !== word.id) return { data: null, error: null };
           if (where.term !== undefined && where.term !== word.term) return { data: null, error: null };
+          if ('definition' in where && where.definition !== word.definition) return { data: null, error: null };
           if (updates && failUpdate) return { data: null, error: new Error('database unavailable') };
           if (updates) word = { ...word, ...updates };
           return { data: { ...word }, error: null };
@@ -58,7 +61,7 @@ async function fixture(t: TestContext) {
   const requestWaiters = new Map<number, () => void>();
   app.use(express.json());
   app.use('/enrich', createEnrichmentRouter({
-    database: database as never, speech, illustration,
+    database: database as never, speech, illustration, definition,
     authenticate: async (req, res, next) => {
       requests += 1;
       requestWaiters.get(requests)?.();
@@ -79,8 +82,9 @@ async function fixture(t: TestContext) {
     return { status: response.status, body: await response.json() as any };
   };
   return {
-    post, files, speech, illustration, bucket, filters,
-    rename: (term: string) => { word = { ...word, term, pronunciation_url: null, image_url: null }; },
+    post, files, speech, illustration, definition, bucket, filters,
+    edit: (updates: Partial<typeof word>) => { word = { ...word, ...updates }; },
+    rename: (term: string) => { word = { ...word, term, definition: null, enrichment: null, pronunciation_url: null, image_url: null }; },
     currentWord: () => word,
     whenRequests: (count: number) => requests >= count ? Promise.resolve() : new Promise<void>((resolve) => requestWaiters.set(count, resolve)),
     setFailures: (options: { update?: boolean; image?: boolean; speech?: boolean; upload?: boolean; read?: boolean }) => {
@@ -194,4 +198,59 @@ test('renaming uses a different audio object and does not restore media from an 
   assert.equal(f.speech.mock.callCount(), 2);
   assert.equal(f.files.size, 2);
   assert.equal(f.currentWord().term, 'tranquil');
+});
+
+test('repairs legacy missing definitions and replaces unrelated Unsplash photos', async (t) => {
+  const f = await fixture(t);
+  f.edit({ image_url: 'https://images.unsplash.com/old-unrelated-photo' });
+  const first = await f.post();
+  assert.equal(first.body.word.definition, 'Calm, peaceful, unruffled');
+  assert.equal(first.body.definition_available, true);
+  assert.equal(first.body.word.image_url, 'https://images.unsplash.com/photo-test');
+  assert.deepEqual(f.illustration.mock.calls[0].arguments, ['serene', 'Calm, peaceful, unruffled']);
+  await f.post();
+  assert.equal(f.definition.mock.callCount(), 1);
+  assert.equal(f.illustration.mock.callCount(), 1);
+});
+
+test('a dictionary outage preserves audio, then retries the meaning and photo', async (t) => {
+  const f = await fixture(t);
+  f.definition.mock.mockImplementationOnce(async () => { throw new Error('offline'); });
+  const first = await f.post();
+  assert.equal(first.body.enrichment_pending, true);
+  assert.equal(first.body.pronunciation_available, true);
+  assert.equal(f.illustration.mock.callCount(), 0);
+  assert.equal((await f.post()).body.enrichment_pending, false);
+  assert.equal(f.speech.mock.callCount(), 1);
+});
+
+test('preserves manual definitions, including edits made while enrichment is running', async (t) => {
+  const f = await fixture(t);
+  f.edit({ definition: 'My own meaning' });
+  await f.post();
+  assert.equal(f.definition.mock.callCount(), 0);
+  assert.equal(f.currentWord().definition, 'My own meaning');
+  f.edit({ definition: null, enrichment: null });
+  let finish!: (value: any) => void;
+  let started!: () => void;
+  const working = new Promise<void>((resolve) => { started = resolve; });
+  f.definition.mock.mockImplementationOnce(() => { started(); return new Promise(resolve => { finish = resolve; }); });
+  const job = f.post();
+  await working;
+  f.edit({ definition: 'Typed while waiting' });
+  finish({ text: 'Automatic meaning', source: {} });
+  assert.equal((await job).status, 409);
+  assert.equal(f.currentWord().definition, 'Typed while waiting');
+});
+
+test('successful no-match results are saved and not repeatedly requested', async (t) => {
+  const f = await fixture(t);
+  f.definition.mock.mockImplementation(async () => null as never);
+  f.illustration.mock.mockImplementation(async () => null);
+  const first = await f.post();
+  assert.equal(first.body.definition_available, false);
+  assert.equal(first.body.enrichment_pending, false);
+  await f.post();
+  assert.equal(f.definition.mock.callCount(), 1);
+  assert.equal(f.illustration.mock.callCount(), 1);
 });

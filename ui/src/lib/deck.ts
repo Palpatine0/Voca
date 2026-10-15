@@ -19,8 +19,11 @@ export interface DeckState {
 
 export const emptyDeck: DeckState = { entries: [], loaded: false, syncing: false, message: null };
 const needsWork = (entry: SavedWord) => !entry.enrichmentComplete || (supportsOfflineAudio && !entry.audioReady);
+const contentComplete = (word: Word) => word.enrichment?.version === 1 &&
+  (Boolean(word.definition) || word.enrichment.definition_status === 'not_found') &&
+  (word.enrichment.image_status === 'ready' || word.enrichment.image_status === 'not_found');
 const newEntry = (word: Word): SavedWord => ({
-  word, enrichmentComplete: Boolean(word.pronunciation_url && word.image_url),
+  word, enrichmentComplete: Boolean(word.pronunciation_url) && contentComplete(word),
   audioReady: false, attempts: 0, retryAt: 0,
 });
 
@@ -74,6 +77,8 @@ export class DeckStore {
           );
           // Recheck files instead of trusting a persisted "ready" label.
           for (const entry of entries) {
+            // Old caches called audio + an arbitrary photo "complete".
+            if (!contentComplete(entry.word)) { entry.enrichmentComplete = false; entry.retryAt = 0; }
             entry.audioReady = Boolean(entry.word.pronunciation_url && await getLocalPronunciationUri(
               this.userId, entry.word.id, entry.word.pronunciation_url
             ));
@@ -143,7 +148,7 @@ export class DeckStore {
       const warning = await this.saveMutation((entries) => entries.map((entry) => entry.word.id !== id ? entry :
         changedTerm ? newEntry(word) : {
           ...entry, word,
-          enrichmentComplete: Boolean(word.pronunciation_url) && (entry.enrichmentComplete || Boolean(word.image_url)),
+          enrichmentComplete: Boolean(word.pronunciation_url) && contentComplete(word),
           audioReady: entry.audioReady && entry.word.pronunciation_url === word.pronunciation_url,
         }));
       if (changedTerm) this.clearAudio(id);
@@ -214,7 +219,7 @@ export class DeckStore {
                 if (!old || old.word.term !== word.term) return newEntry(word);
                 return {
                   ...old, word,
-                  enrichmentComplete: Boolean(word.pronunciation_url) && (old.enrichmentComplete || Boolean(word.image_url)),
+                  enrichmentComplete: Boolean(word.pronunciation_url) && contentComplete(word),
                   audioReady: old.audioReady && old.word.pronunciation_url === word.pronunciation_url,
                 };
               }),

@@ -81,7 +81,7 @@ export default function AddScreen() {
     : saved?.enrichmentComplete && !supportsOfflineAudio
       ? 'Added with online pronunciation'
       : saved
-        ? 'Added. Unfinished audio and images will retry while Voca is open.'
+        ? 'Added. Preparing a short meaning, photo, and pronunciation.'
         : 'Added to your deck';
 
   return (
@@ -151,7 +151,7 @@ export default function AddScreen() {
               label="Definition"
               value={definition}
               onChangeText={setDefinition}
-              placeholder="What does it mean?"
+              placeholder="Optional — a short meaning is added automatically"
               multiline
               textAlignVertical="top"
               style={styles.definitionInput}

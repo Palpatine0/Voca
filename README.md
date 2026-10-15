@@ -201,6 +201,36 @@ then return Home and confirm the due count updates. Audio should stop when you
 leave a card. Automated tests mock the API and native audio; they do not validate
 live SM-2 persistence or device playback.
 
+## Automatic meanings and photos
+
+Apply `supabase/migrations/20261015000000_word_enrichment.sql` before deploying
+this API update. The additive `enrichment` JSON column stores lookup status and
+source credits without changing existing words, ownership, or review progress.
+Existing words are checked automatically when the app opens; old Unsplash results
+are replaced with a description-matched photo. User-written meanings and custom
+image URLs are preserved.
+
+Blank definitions are filled from the English [Wiktionary REST API](https://www.mediawiki.org/wiki/Wikimedia_REST_API).
+Voca uses the first meaning, removes HTML, examples, subsequent sentences, and
+explanatory clauses, and displays a complete short phrase. It does not use a paid
+language model or truncate definitions mid-word. Dictionary text is credited and
+shared under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
+Some specialized definitions are longer to preserve their meaning. Unlisted
+terms show a no-match message and can be edited in Library.
+
+Photos come from Unsplash search, not image generation. A phobia uses its subject
+(e.g. stars and space); other terms can fall back to meaning keywords. Results
+must match their description, alt text, or tags. No match is preferable to an
+unrelated picture. Displayed images retain their Unsplash URLs; selection is
+registered through `download_location`, and photographer/Unsplash links are
+shown on cards and in word details.
+
+Review cards receive completed content from the shared deck while retaining
+their place and flipped side. Provider outages do not discard successful content,
+and concurrent edits/renames prevent an older enrichment job from overwriting
+the user's changes. `test:library` in the API and the UI's review/deck tests cover
+these cases with fixtures; live provider checks remain separate.
+
 ## Offline pronunciation and retries
 
 On iOS and Android, added words are saved to an account-specific local deck
@@ -223,12 +253,12 @@ The browser plays audio online and does not claim offline downloads. Adding
 words and submitting review ratings still require a connection. Illustrations
 are stored as URLs only; review images use memory caching rather than disk.
 
-The enrichment endpoint keeps successful audio/images when another provider
-fails, returns `enrichment_pending`, and retries only missing media. An uploaded
+The enrichment endpoint keeps successful meanings, audio, and images when another
+provider fails, returns `enrichment_pending`, and retries only unfinished lookups. An uploaded
 MP3 is reused after a failed database update. Overlapping requests for the same
 word are coalesced within one API process; this is not a distributed job lock.
-An image search with no result or an unconfigured Unsplash key finishes without
-an image. API and UI should be deployed together for the new response field.
+A successful search with no match is saved as `not_found`; a missing key or
+provider outage remains retryable. API and UI should be deployed together for the new response field.
 
 `npm --prefix ui run test:offline` tests restart recovery, account isolation,
 backoff, partial downloads, honest save feedback, and stalled API requests.
@@ -383,8 +413,7 @@ Secret Key is not used. Illustration lookup succeeded from the deployed API
 on October 14, 2026. Pronunciation generation succeeded locally with the
 configured ElevenLabs key, but the same request from Koyeb returned HTTP 403;
 production pronunciation remains blocked pending resolution of that access
-failure. Unsplash photographer attribution and download tracking also remain
-unfinished. Keep credential values out of repository files and rotate shared
+failure. Unsplash photos include photographer credits and selection tracking. Keep credential values out of repository files and rotate shared
 credentials through the provider dashboards and Koyeb secret storage.
 
 The free backend can sleep after inactivity, so its first request may be slower.

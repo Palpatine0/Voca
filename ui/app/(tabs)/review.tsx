@@ -8,12 +8,14 @@ import { FlashCard } from '../../src/components/FlashCard';
 import { GradientOrb } from '../../src/components/GradientOrb';
 import { RatingButtons } from '../../src/components/RatingButtons';
 import { api, Word } from '../../src/lib/api';
+import { useDeck } from '../../src/context/DeckContext';
 import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { saveReview, waitForReviewSaves } from '../../src/lib/review';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
 
 export default function ReviewScreen() {
   const theme = useTheme();
+  const deck = useDeck();
   const [words, setWords] = useState<Word[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -78,7 +80,10 @@ export default function ReviewScreen() {
     }
   };
 
-  const currentWord = words[currentIndex];
+  const queuedWord = words[currentIndex];
+  const saved = deck.entries.find((entry) => entry.word.id === queuedWord?.id && entry.word.term === queuedWord.term);
+  // Keep the review order, but show enrichment as soon as the worker saves it.
+  const currentWord = saved?.word.enrichment?.version === 1 ? { ...queuedWord, ...saved.word } : queuedWord;
   const isComplete = !loading && !loadError && !currentWord;
 
   if (loading) {
@@ -170,6 +175,11 @@ export default function ReviewScreen() {
         {/* Card */}
         <View style={styles.cardArea}>
           <FlashCard key={currentWord.id} word={currentWord} />
+          {!currentWord.definition && currentWord.enrichment?.definition_status !== 'not_found' && (
+            <Text style={[typography.caption, styles.message, { color: theme.colors.muted }]}>
+              {deck.syncing ? 'Finding a short meaning…' : 'Meaning pending. Refresh Library to retry.'}
+            </Text>
+          )}
         </View>
 
         {/* Rating buttons */}

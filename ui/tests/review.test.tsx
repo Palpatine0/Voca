@@ -6,8 +6,10 @@ import { router } from 'expo-router';
 import HomeScreen from '../app/(tabs)/index';
 import ReviewScreen from '../app/(tabs)/review';
 import { FlashCard } from '../src/components/FlashCard';
+import { useDeck } from '../src/context/DeckContext';
 import { api, Word, WordStats } from '../src/lib/api';
 
+jest.mock('../src/context/DeckContext', () => ({ useDeck: jest.fn() }));
 jest.mock('../src/lib/api', () => ({
   api: { getDueWords: jest.fn(), getWordStats: jest.fn(), submitReview: jest.fn() },
 }));
@@ -83,6 +85,7 @@ async function press(label: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  jest.mocked(useDeck).mockReturnValue({ entries: [], syncing: false } as unknown as ReturnType<typeof useDeck>);
   sdk.getDueWords.mockReset().mockResolvedValue({ words: [first, second] });
   sdk.getWordStats.mockReset().mockResolvedValue({ total: 5, due: 2 });
   sdk.submitReview.mockReset().mockResolvedValue({ word: first });
@@ -267,4 +270,20 @@ it.each([false, true])('waits for a review save before fetching Home counts (fai
   expect(sdk.getWordStats).toHaveBeenCalledTimes(1);
   expect(textContent()).toContain(failure ? 'words due for review' : 'word due for review');
   expect(button('Start Review').props.disabled).toBe(false);
+});
+
+it('updates a revealed card when background enrichment finishes without resetting its side or order', async () => {
+  sdk.getDueWords.mockResolvedValueOnce({ words: [{ ...first, definition: null }] });
+  await mount(<ReviewScreen />);
+  await press('Reveal definition');
+  expect(textContent()).toContain('Finding a short meaning');
+  jest.mocked(useDeck).mockReturnValue({ entries: [{ word: {
+    ...first, definition: 'Calm, peaceful, unruffled', image_url: 'https://images.unsplash.com/test',
+    enrichment: { version: 1, definition_status: 'ready', image_status: 'ready' },
+  } }], syncing: false } as unknown as ReturnType<typeof useDeck>);
+  await act(async () => { root.update(<ReviewScreen />); });
+  expect(textContent()).toContain('Calm, peaceful, unruffled');
+  expect(button('Show word')).toBeDefined();
+  expect(sdk.getDueWords).toHaveBeenCalledTimes(1);
+  expect(sdk.submitReview).not.toHaveBeenCalled();
 });

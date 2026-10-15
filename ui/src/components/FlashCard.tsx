@@ -8,6 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { PronunciationButton } from './PronunciationButton';
+import { WordSources } from './WordSources';
 import { Word } from '../lib/api';
 import { radii, spacing, typography, useTheme } from '../lib/theme';
 
@@ -67,7 +68,7 @@ export function FlashCard({ word }: FlashCardProps) {
         <Text
           style={[
             typography.displayLg,
-            { color: theme.colors.ink, marginTop: spacing.md },
+            { color: theme.colors.ink, marginTop: spacing.md, textAlign: 'center' },
           ]}
         >
           {word.term}
@@ -108,10 +109,11 @@ export function FlashCard({ word }: FlashCardProps) {
         <Text
           style={[
             typography.titleMd,
-            { color: theme.colors.ink, marginTop: spacing.md },
+            { color: theme.colors.ink, marginTop: spacing.md, textAlign: 'center' },
           ]}
         >
-          {word.definition || 'No definition yet'}
+          {word.definition || (word.enrichment?.definition_status === 'not_found'
+            ? 'No dictionary match. Add a meaning in Library.' : 'Finding a short meaning…')}
         </Text>
         {word.image_url && (
           <Image
@@ -122,6 +124,7 @@ export function FlashCard({ word }: FlashCardProps) {
             accessibilityLabel={`Illustration for ${word.term}`}
           />
         )}
+        <WordSources word={word} />
       </Animated.View>
     </Pressable>
   );

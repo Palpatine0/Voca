@@ -3,12 +3,14 @@ import { createHash } from 'node:crypto';
 import { synthesizeSpeech } from '../lib/elevenlabs';
 import { supabaseAdmin, STORAGE_BUCKET } from '../lib/supabaseAdmin';
 import { findIllustrationUrl } from '../lib/unsplash';
+import { findDefinition } from '../lib/definition';
 import { requireSession } from '../middleware/requireSession';
 
 export function createEnrichmentRouter({
   database = supabaseAdmin,
   speech = synthesizeSpeech,
   illustration = findIllustrationUrl,
+  definition = findDefinition,
   authenticate = requireSession,
 } = {}) {
   const router = Router();
@@ -43,29 +45,58 @@ export function createEnrichmentRouter({
       return bucket.getPublicUrl(audioPath).data.publicUrl;
     };
 
-    const [audio, image] = await Promise.allSettled([
-      pronunciation(),
-      word.image_url ? Promise.resolve(word.image_url as string) : illustration(word.term),
-    ]);
-    const updates: Record<string, string> = {};
+    const metadata = { ...word.enrichment, version: 1 };
+    const meaning = async () => {
+      if (word.definition?.trim()) {
+        metadata.definition_status = 'ready';
+        return word.definition as string;
+      }
+      if (metadata.definition_status === 'not_found') return null;
+      const result = await definition(word.term);
+      metadata.definition_status = result ? 'ready' : 'not_found';
+      metadata.definition_source = result?.source ?? null;
+      return result?.text ?? null;
+    };
+    const meaningTask = meaning();
+    const picture = async () => {
+      // Recheck legacy Unsplash results once, preserving user-provided images.
+      const customImage = word.image_url && !/^https:\/\/images\.unsplash\.com\//.test(word.image_url);
+      if (customImage || (word.image_url && metadata.image_status === 'ready')) {
+        metadata.image_status = 'ready';
+        return word.image_url as string;
+      }
+      if (metadata.image_status === 'not_found') return null;
+      // A failed dictionary lookup should not lock in a poor rare-word search.
+      const text = await meaningTask;
+      const result = await illustration(word.term, text);
+      metadata.image_status = result ? 'ready' : 'not_found';
+      metadata.image_source = result?.source ?? null;
+      return result?.url ?? null;
+    };
+    const [audio, image, text] = await Promise.allSettled([pronunciation(), picture(), meaningTask]);
+    const updates: Record<string, unknown> = { enrichment: metadata };
     if (audio.status === 'fulfilled' && audio.value !== word.pronunciation_url) updates.pronunciation_url = audio.value;
-    if (image.status === 'fulfilled' && image.value && image.value !== word.image_url) updates.image_url = image.value;
+    if (image.status === 'fulfilled' && image.value !== word.image_url) updates.image_url = image.value;
+    if (text.status === 'fulfilled' && text.value !== word.definition) updates.definition = text.value;
 
     let updatedWord = word;
     if (Object.keys(updates).length) {
-      const result = await database.from('words').update(updates)
-        .eq('id', wordId).eq('user_id', userId).eq('term', word.term).select().maybeSingle();
+      let update = database.from('words').update(updates)
+        .eq('id', wordId).eq('user_id', userId).eq('term', word.term);
+      // Preserve a meaning typed while providers were running.
+      update = word.definition == null ? update.is('definition', null) : update.eq('definition', word.definition);
+      const result = await update.select().maybeSingle();
       if (result.error) return { status: 500, body: { error: 'Unable to save enrichment' } };
       if (!result.data) return { status: 409, body: { error: 'Word changed. Refresh and retry enrichment.' } };
       updatedWord = result.data;
     }
-    // Preserve either successful result and report unfinished work explicitly.
-    // A successful image lookup with no result (or no configured key) is terminal.
+    // No match is terminal; outages retry without repeating completed lookups.
     return { status: 200, body: {
       word: updatedWord,
+      definition_available: Boolean(updatedWord.definition),
       image_available: Boolean(updatedWord.image_url),
       pronunciation_available: Boolean(updatedWord.pronunciation_url),
-      enrichment_pending: audio.status === 'rejected' || image.status === 'rejected',
+      enrichment_pending: audio.status === 'rejected' || image.status === 'rejected' || text.status === 'rejected',
     } };
   }
 

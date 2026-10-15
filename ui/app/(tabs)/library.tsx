@@ -92,7 +92,7 @@ export function LibraryContent({ deck, focused }: { deck: ReturnType<typeof useD
         <View style={styles.cardRow}>
           <Pressable accessibilityRole="button" accessibilityLabel={'Edit ' + item.word.term} onPress={() => { setSelectedWord(item.word); setNotice(null); }} style={styles.wordButton}>
             <Text style={[typography.titleMd, { color: theme.colors.ink }]}>{item.word.term}</Text>
-            <Text numberOfLines={2} style={[typography.bodySm, styles.description, { color: theme.colors.body }]}>{item.word.definition || 'Tap to add a meaning'}</Text>
+            <Text numberOfLines={2} style={[typography.bodySm, styles.description, { color: theme.colors.body }]}>{item.word.definition || (item.word.enrichment?.definition_status === 'not_found' ? 'No dictionary match · tap to add a meaning' : 'Finding a short meaning…')}</Text>
           </Pressable>
           {focused && !selectedWord && item.word.pronunciation_url && <PronunciationButton userId={item.word.user_id} wordId={item.word.id} audioUrl={item.word.pronunciation_url} />}
         </View>
@@ -100,7 +100,7 @@ export function LibraryContent({ deck, focused }: { deck: ReturnType<typeof useD
         <Text style={[typography.caption, styles.description, { color: theme.colors.muted }]}>
           {item.audioReady ? 'Pronunciation saved offline' : !supportsOfflineAudio && item.word.pronunciation_url ? 'Online pronunciation' : item.attempts ? 'Audio pending · will retry' : 'Preparing pronunciation…'}
         </Text>
-        {!item.enrichmentComplete && item.audioReady && <Text style={[typography.caption, { color: theme.colors.muted }]}>Illustration pending · will retry</Text>}
+        {!item.enrichmentComplete && item.audioReady && <Text style={[typography.caption, { color: theme.colors.muted }]}>Meaning or photo pending · will retry</Text>}
       </View>}
     />
     {focused && selected && <WordEditor key={selected.id} word={selected} updateWord={deck.updateWord} removeWord={deck.removeWord}
