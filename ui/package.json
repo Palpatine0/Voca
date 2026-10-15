@@ -12,6 +12,7 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "build": "expo export",
+    "build:web": "expo export --platform web",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
     "test:auth": "jest --runInBand tests/auth.test.tsx",

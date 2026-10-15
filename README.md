@@ -305,8 +305,51 @@ transparent 1024×1024 PNGs, and the favicon is 64×64.
 ## Deployment
 
 - **API**: Docker → Koyeb (port 8080)
-- **UI**: EAS Build (iOS/Android) + Expo Web
+- **Web UI**: Vercel, project `sethmccarthys-projects/voca`
+- **Native UI**: EAS Build (iOS/Android; project linking still required)
 - **Database**: Supabase (hosted Postgres)
+
+### Live web deployment
+
+- App: https://voca0.vercel.app
+- API health: https://voca-api-carrion-spike-2eaa6bca.koyeb.app/health
+- Koyeb App/Service: `voca-api/voca-api`, free instance in Washington, D.C.
+
+Vercel's Root Directory is `ui`, with framework preset Other, install command
+`npm ci`, build command `npm run build:web`, and output directory `dist`.
+Keep files outside the root directory excluded from the build so the Koyeb
+backend in `api/` is not treated as Vercel serverless functions. `ui/vercel.json`
+serves Expo's single-page export and rewrites direct routes to the app. The
+production environment has `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SUPABASE_URL`,
+and `EXPO_PUBLIC_SUPABASE_ANON_KEY` configured. The project is connected to
+`Palpatine0/Voca`; pushes to `main` deploy the frontend automatically. For CLI
+deployments, link the repository root with
+`vercel link --project voca --scope sethmccarthys-projects`, then run
+`vercel deploy --prod --scope sethmccarthys-projects` from that same root.
+
+Koyeb builds `api/Dockerfile` from an uploaded source snapshot. The upload
+contains only `src`, `package.json`, `package-lock.json`, `tsconfig.json`,
+`Dockerfile`, and `.dockerignore`; local environment files are excluded. The
+server uses the `voca-supabase-service-role` Koyeb secret for its Supabase key.
+Git pushes do not automatically deploy this snapshot; upload a new filtered
+snapshot to `voca-api/voca-api` when the API changes.
+
+Supabase's Auth Site URL is the production Vercel URL, so default confirmation
+links return to the live app. Email confirmation remains enabled.
+
+Koyeb's `ELEVENLABS_API_KEY` and `UNSPLASH_ACCESS_KEY` reference the managed
+secrets `voca-elevenlabs-api-key` and `voca-unsplash-access-key`. The Unsplash
+Secret Key is not used. Illustration lookup succeeded from the deployed API
+on October 14, 2026. Pronunciation generation succeeded locally with the
+configured ElevenLabs key, but the same request from Koyeb returned HTTP 403;
+production pronunciation remains blocked pending resolution of that access
+failure. Unsplash photographer attribution and download tracking also remain
+unfinished. Keep credential values out of repository files and rotate shared
+credentials through the provider dashboards and Koyeb secret storage.
+
+The free backend can sleep after inactivity, so its first request may be slower.
+
+### Native builds
 
 Apply the SQL migrations to the target Supabase project before running the API.
 Configure the API's server environment on the host. Before an EAS build, link

@@ -6,6 +6,7 @@ node_modules
 dist
 .expo
 .expo-shared
+.vercel
 web-build
 .DS_Store
 *.log
