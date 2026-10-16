@@ -356,6 +356,26 @@ npm --prefix ui run assets:generate
 The icon is an opaque 1024×1024 PNG, the adaptive foreground and splash are
 transparent 1024×1024 PNGs, and the favicon is 64×64.
 
+### Safari Home Screen installation
+
+The single-page web export uses `ui/public/index.html` for its install metadata.
+It links the opaque 180px `apple-touch-icon.png` and a web manifest with a stable
+root ID, root start URL/scope, standalone display, and 192px/512px icons. All
+icons are generated from the existing Voca SVG by `assets:generate`.
+`viewport-fit=cover` lets the existing safe-area provider and tab dock respect
+the iPhone's screen insets. This setup adds no service worker or offline web cache.
+
+On iPhone, open `https://voca0.vercel.app` in Safari, refresh, choose **Share →
+Add to Home Screen**, leave **Open as Web App** enabled if shown, and tap **Add**.
+Launch Voca from that Home Screen icon. A shortcut installed before this metadata
+was published should be removed and added again. Regular Safari tabs retain their
+browser controls; standalone launches hide the address and toolbar while keeping
+the iPhone status bar. See [Apple's installation instructions](https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/ios).
+
+Verify the built HTML's install tags and the deployed manifest/icon responses.
+Desktop rendering or a mobile-sized viewport cannot confirm installation on a
+physical iPhone; check the Home Screen icon and standalone launch on the device.
+
 ## Deployment
 
 - **API**: Docker → Koyeb (port 8080)
