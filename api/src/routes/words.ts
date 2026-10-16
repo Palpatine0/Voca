@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 import { requireSession } from '../middleware/requireSession';
+import { capitalizeWords } from '../lib/words';
 
 export function createWordsRouter({ database = supabaseAdmin, authenticate = requireSession } = {}) {
   const router = Router();
@@ -67,6 +68,9 @@ export function createWordsRouter({ database = supabaseAdmin, authenticate = req
       return res.status(400).json({ error: 'term is required' });
     }
 
+    const cleanTerm = capitalizeWords(term.trim());
+    if (cleanTerm.length > 200) return res.status(400).json({ error: 'Enter a word between 1 and 200 characters.' });
+
     if (client_id !== undefined) {
       if (typeof client_id !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(client_id)) {
         return res.status(400).json({ error: 'Invalid word save ID' });
@@ -75,13 +79,13 @@ export function createWordsRouter({ database = supabaseAdmin, authenticate = req
       // word, its media, or review history when a successful response was lost.
       try {
         const { data, error } = await database.from('words').upsert({
-          id: client_id, user_id: req.userId!, term: term.trim(),
+          id: client_id, user_id: req.userId!, term: cleanTerm,
         }, { onConflict: 'id', ignoreDuplicates: true }).select().maybeSingle();
         if (error) return res.status(500).json({ error: 'Unable to save word. Please try again.' });
         if (data) return res.status(201).json({ word: data });
         const existing = await database.from('words').select('*').eq('id', client_id).eq('user_id', req.userId!).maybeSingle();
         if (existing.error) return res.status(500).json({ error: 'Unable to confirm word. Please try again.' });
-        if (!existing.data || existing.data.term !== term.trim()) return res.status(409).json({ error: 'This save ID is already in use.' });
+        if (!existing.data || capitalizeWords(existing.data.term) !== cleanTerm) return res.status(409).json({ error: 'This save ID is already in use.' });
         return res.json({ word: existing.data });
       } catch {
         return res.status(500).json({ error: 'Unable to save word. Please try again.' });
@@ -92,7 +96,7 @@ export function createWordsRouter({ database = supabaseAdmin, authenticate = req
       .from('words')
       .insert({
         user_id: req.userId!,
-        term: term.trim(),
+        term: cleanTerm,
         definition: definition?.trim() || null,
         pronunciation_url: pronunciation_url || null,
         image_url: image_url || null,
@@ -130,8 +134,8 @@ export function createWordsRouter({ database = supabaseAdmin, authenticate = req
         };
       }
       if (term !== undefined) {
-        updates.term = term.trim();
-        if (updates.term !== existing.data.term) {
+        updates.term = capitalizeWords(term.trim());
+        if (updates.term !== capitalizeWords(existing.data.term)) {
           updates.pronunciation_url = null;
           updates.image_url = null;
           updates.enrichment = null;

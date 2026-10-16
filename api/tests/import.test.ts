@@ -38,12 +38,16 @@ test('photo saves reuse a stable ID, preserve review history, and never return a
   const post = (user = 'user', client_id = id, term = 'Serene') => fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/words`, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: user }, body: JSON.stringify({ term, client_id }),
   });
-  assert.equal((await post()).status, 201);
+  assert.equal((await post('user', id, 'serene')).status, 201);
+  assert.equal(rows.get(id).term, 'Serene');
   rows.get(id).repetitions = 4;
   const retry = await post();
   assert.equal(retry.status, 200);
   assert.equal((await retry.json()).word.repetitions, 4);
   assert.equal(rows.size, 1);
+  rows.get(id).term = 'serene'; // A retry of an import saved before capitalization shipped.
+  assert.equal((await post()).status, 200);
+  assert.equal(rows.get(id).repetitions, 4);
   assert.equal((await post('other')).status, 409);
   assert.equal((await post('user', id, 'Changed')).status, 409);
   assert.equal((await post('user', 'not-a-uuid')).status, 400);

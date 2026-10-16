@@ -15,6 +15,7 @@ import { Button } from '../../src/components/Button';
 import { TextInput } from '../../src/components/TextInput';
 import { PhotoImport } from '../../src/components/PhotoImport';
 import { api } from '../../src/lib/api';
+import { capitalizeWords } from '../../src/lib/words';
 import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { supportsOfflineAudio } from '../../src/lib/audio';
 import { useAuth } from '../../src/context/AuthContext';
@@ -35,7 +36,7 @@ export default function AddScreen() {
 
   const handleAddWord = async () => {
     if (adding.current || !user) return;
-    const cleanTerm = term.trim();
+    const cleanTerm = capitalizeWords(term.trim());
     const cleanDefinition = definition.trim();
 
     if (!cleanTerm) {
@@ -136,12 +137,13 @@ export default function AddScreen() {
               label="Word"
               value={term}
               onChangeText={(value) => {
-                setTerm(value);
+                setTerm(capitalizeWords(value));
                 if (error) setError(null);
                 if (savedId) setSavedId(null);
               }}
               placeholder="e.g. ephemeral"
-              autoCapitalize="none"
+              autoCapitalize="words"
+              maxLength={200}
               autoCorrect={false}
               returnKeyType="next"
               error={error && !term.trim() ? error : undefined}

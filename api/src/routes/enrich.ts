@@ -74,6 +74,7 @@ export function createEnrichmentRouter({
       return result?.url ?? null;
     };
     const [audio, image, text] = await Promise.allSettled([pronunciation(), picture(), meaningTask]);
+    if (audio.status === 'rejected') console.warn('[enrich] Pronunciation failed; retry pending');
     const updates: Record<string, unknown> = { enrichment: metadata };
     if (audio.status === 'fulfilled' && audio.value !== word.pronunciation_url) updates.pronunciation_url = audio.value;
     if (image.status === 'fulfilled' && image.value !== word.image_url) updates.image_url = image.value;

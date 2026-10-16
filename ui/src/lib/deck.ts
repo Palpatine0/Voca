@@ -1,3 +1,4 @@
+import { capitalizeWords } from './words';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, ApiError, Word } from './api';
 import { downloadPronunciation, getLocalPronunciationUri, removePronunciation, supportsOfflineAudio } from './audio';
@@ -144,7 +145,7 @@ export class DeckStore {
     try {
       const { word } = await api.updateWord(id, updates, this.userId);
       if (!this.active || word.user_id !== this.userId || word.id !== id) throw new Error('Account changed. Please try again.');
-      const changedTerm = previous.word.term !== word.term;
+      const changedTerm = capitalizeWords(previous.word.term) !== capitalizeWords(word.term);
       const warning = await this.saveMutation((entries) => entries.map((entry) => entry.word.id !== id ? entry :
         changedTerm ? newEntry(word) : {
           ...entry, word,
@@ -216,7 +217,7 @@ export class DeckStore {
             return [
               ...words.filter((word) => !changed(word.id)).map((word) => {
                 const old = previous.get(word.id);
-                if (!old || old.word.term !== word.term) return newEntry(word);
+                if (!old || capitalizeWords(old.word.term) !== capitalizeWords(word.term)) return newEntry(word);
                 return {
                   ...old, word,
                   enrichmentComplete: Boolean(word.pronunciation_url) && contentComplete(word),

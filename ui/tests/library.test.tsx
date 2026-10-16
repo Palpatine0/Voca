@@ -71,12 +71,12 @@ it('preserves failed edits, validates an empty term and blocks rapid duplicate s
   act(() => { input('Word').props.onChangeText(' tranquil '); input('Definition').props.onChangeText(' Peaceful '); });
   jest.mocked(deck.updateWord).mockRejectedValueOnce(new Error('Network unavailable'));
   await press('Save changes');
-  expect(input('Word').props.value).toBe(' tranquil ');
+  expect(input('Word').props.value).toBe(' Tranquil ');
   expect(renderedText()).toContain('Network unavailable');
   const save = button('Save changes').props.onPress;
   await act(async () => { save(); save(); });
   expect(deck.updateWord).toHaveBeenCalledTimes(2);
-  expect(deck.updateWord).toHaveBeenLastCalledWith('0', { term: 'tranquil', definition: 'Peaceful' });
+  expect(deck.updateWord).toHaveBeenLastCalledWith('0', { term: 'Tranquil', definition: 'Peaceful' });
   expect(root.root.findAllByType(WordEditor)).toHaveLength(0);
   expect(renderedText()).toContain('updated');
 });

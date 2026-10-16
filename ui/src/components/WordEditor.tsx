@@ -5,6 +5,7 @@ import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleShee
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Word } from '../lib/api';
 import { reviewLabel } from '../lib/library';
+import { capitalizeWords } from '../lib/words';
 import { radii, spacing, typography, useTheme } from '../lib/theme';
 import { Button } from './Button';
 import { PronunciationButton } from './PronunciationButton';
@@ -30,8 +31,8 @@ export function WordEditor({ word, updateWord, removeWord, onClose, onSaved }: P
   const locked = useRef(false);
   const active = useRef(true);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
-  const renamed = term.trim() !== word.term;
-  const dirty = renamed || definition.trim() !== (word.definition ?? '');
+  const renamed = capitalizeWords(term.trim()) !== capitalizeWords(word.term);
+  const dirty = term.trim() !== word.term || definition.trim() !== (word.definition ?? '');
   const close = () => { if (!locked.current) onClose(); };
 
   const save = async (remove: boolean) => {
@@ -44,9 +45,9 @@ export function WordEditor({ word, updateWord, removeWord, onClose, onSaved }: P
     setBusy(true);
     setError(null);
     try {
-      const warning = remove ? await removeWord(word.id) : await updateWord(word.id, { term: term.trim(), definition: definition.trim() || null });
+      const warning = remove ? await removeWord(word.id) : await updateWord(word.id, { term: capitalizeWords(term.trim()), definition: definition.trim() || null });
       if (!active.current) return;
-      onSaved(warning || (remove ? `“${word.term}” removed from your deck.` : `“${term.trim()}” updated.`));
+      onSaved(warning || (remove ? `“${word.term}” removed from your deck.` : `“${capitalizeWords(term.trim())}” updated.`));
       onClose();
     } catch (failure) {
       if (active.current) setError(failure instanceof Error ? failure.message : 'Unable to save. Please try again.');
@@ -74,7 +75,7 @@ export function WordEditor({ word, updateWord, removeWord, onClose, onSaved }: P
           </View>
           {word.image_url && !renamed && !imageFailed && <Image source={word.image_url} cachePolicy="memory" contentFit="cover" style={styles.image}
             accessibilityLabel={`Illustration for ${word.term}`} onError={() => setImageFailed(true)} />}
-          <TextInput label="Word" value={term} onChangeText={setTerm} autoCapitalize="none" autoCorrect={false} editable={!busy && !confirmDelete} maxLength={200} />
+          <TextInput label="Word" value={term} onChangeText={(value) => setTerm(capitalizeWords(value))} autoCapitalize="words" autoCorrect={false} editable={!busy && !confirmDelete} maxLength={200} />
           <TextInput label="Definition" value={definition} onChangeText={setDefinition} multiline textAlignVertical="top"
             placeholder="What does it mean?" editable={!busy && !confirmDelete} maxLength={4000} style={styles.definition} />
           {!dirty && <WordSources word={word} />}

@@ -447,3 +447,27 @@ your Expo project and replace the placeholder `extra.eas.projectId` in
 account. Set the public Supabase environment values for the build and verify
 the API URL in `ui/eas.json` points to your deployed service. These steps are
 deployment configuration, not performed by a local bundle export.
+
+### Production pronunciation routing
+
+Koyeb validates the signed-in user and loads their saved word. It calls the
+single Vercel function at `/api/pronunciation` using a server-only
+`VOCA_AUDIO_RELAY_SECRET`, then saves the returned MP3 in Supabase Storage.
+This avoids the HTML 403 response observed when Koyeb calls ElevenLabs directly.
+The browser still talks to Koyeb and plays the saved audio URL.
+
+Set `VOCA_AUDIO_RELAY_URL=https://voca0.vercel.app/api/pronunciation` and
+`VOCA_AUDIO_RELAY_SECRET` on Koyeb. Set the identical relay secret and
+`ELEVENLABS_API_KEY` as sensitive **production** variables in Vercel.
+Generate a random secret of at least 32 characters. Never prefix these keys with
+`EXPO_PUBLIC_`. Deploy Vercel before enabling the relay on Koyeb. Without a relay
+URL, local development calls ElevenLabs directly using `ELEVENLABS_API_KEY`.
+
+The function accepts only authenticated server calls, bounds text to 200
+characters, and rejects invalid or empty MP3 responses before storage. It is
+one function, within the Vercel Hobby function limit. Existing missing audio is
+retried when Library refreshes. Test with `node --test ui/server/*.test.cjs`.
+
+Entered words capitalize each initial (including hyphenated words) while
+preserving acronyms and apostrophes. The API applies this to typed and imported
+words; a capitalization-only edit preserves existing media and review progress.

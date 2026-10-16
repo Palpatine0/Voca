@@ -62,7 +62,7 @@ test('editing a definition preserves media and review progress; renaming invalid
   assert.deepEqual(first.body.word, { ...f.original, definition: 'Peaceful', enrichment: { definition_status: 'ready', definition_source: null, image_status: 'pending' } });
   const renamed = await f.request({ term: ' tranquil ', definition: '' });
   assert.equal(renamed.status, 200);
-  assert.deepEqual(renamed.body.word, { ...f.original, term: 'tranquil', definition: null, pronunciation_url: null, image_url: null, enrichment: null });
+  assert.deepEqual(renamed.body.word, { ...f.original, term: 'Tranquil', definition: null, pronunciation_url: null, image_url: null, enrichment: null });
   assert.deepEqual((await f.request({ term: 'tranquil', definition: '' })).body, renamed.body);
 });
 
@@ -97,4 +97,12 @@ test('a concurrent rename is detected instead of overwriting newer content', asy
   const f = await fixture(t); f.conflict();
   assert.equal((await f.request({ term: 'new' })).status, 409);
   assert.equal(f.current()?.term, 'changed elsewhere');
+});
+
+
+test('capitalization preserves existing pronunciation and review progress', async (t) => {
+  const f = await fixture(t);
+  const result = await f.request({ term: 'Serene' });
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.word, { ...f.original, term: 'Serene' });
 });

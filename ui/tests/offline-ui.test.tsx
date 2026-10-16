@@ -63,7 +63,7 @@ it('adds once on rapid taps and reports offline readiness only after the job com
   await mount(<AddScreen />);
   await add();
   expect(sdk.createWord).toHaveBeenCalledTimes(1);
-  expect(sdk.createWord).toHaveBeenCalledWith('serene', 'Calm', 'user');
+  expect(sdk.createWord).toHaveBeenCalledWith('Serene', 'Calm', 'user');
   expect(JSON.stringify(root.toJSON())).toContain('Added with offline pronunciation');
   expect(JSON.parse(disk.get('voca:deck:v1:user')!).entries[0].audioReady).toBe(true);
 });
@@ -105,4 +105,15 @@ it('resumes jobs in the foreground and removes the worker on logout/unmount', as
   act(() => root.unmount());
   expect(remove).toHaveBeenCalledTimes(1);
   expect(jest.getTimerCount()).toBe(0);
+});
+
+
+it('capitalizes pasted words and hyphenated words while preserving acronyms and apostrophes', async () => {
+  await mount(<AddScreen />);
+  const input = () => root.root.findAllByType(TextInput)[0];
+  act(() => input().props.onChangeText("deep blue NASA don't self-esteem"));
+  expect(input().props.value).toBe("Deep Blue NASA Don't Self-Esteem");
+  const onPress = root.root.findAllByType(Pressable).at(-1)!.props.onPress;
+  await act(async () => { await onPress(); });
+  expect(sdk.createWord).toHaveBeenCalledWith("Deep Blue NASA Don't Self-Esteem", undefined, 'user');
 });

@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { useAuth } from '../context/AuthContext';
 import { useDeck } from '../context/DeckContext';
 import { api } from '../lib/api';
+import { capitalizeWords } from '../lib/words';
 import { choosePhoto, PhotoSource } from '../lib/photo';
 import { radii, spacing, typography, useTheme } from '../lib/theme';
 import { Button } from './Button';
@@ -97,7 +98,7 @@ export function PhotoImportContent({ userId, deck, client = api, pickPhoto = cho
         // Keep the same id across retries, including a lost response after save.
         let id = ids.current.get(key);
         if (!id) { id = randomUUID(); ids.current.set(key, id); }
-        const { word } = await client.createWord(term, undefined, userId, id);
+        const { word } = await client.createWord(capitalizeWords(term), undefined, userId, id);
         if (!active.current) break;
         count += 1;
         setAdded((previous) => new Set([...previous, key]));

@@ -6,6 +6,18 @@
   "framework": null,
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/:path*", "destination": "/" }
-  ]
+    {
+      "source": "/api/pronunciation",
+      "destination": "/api/pronunciation"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/"
+    }
+  ],
+  "functions": {
+    "api/pronunciation.js": {
+      "maxDuration": 30
+    }
+  }
 }
