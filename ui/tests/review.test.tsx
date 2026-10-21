@@ -8,7 +8,11 @@ import ReviewScreen from '../app/(tabs)/review';
 import { FlashCard } from '../src/components/FlashCard';
 import { useDeck } from '../src/context/DeckContext';
 import { api, Word, WordStats } from '../src/lib/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../src/context/AuthContext';
 
+jest.mock('@react-native-async-storage/async-storage', () => ({ getItem: jest.fn(), setItem: jest.fn() }));
+jest.mock('../src/context/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../src/context/DeckContext', () => ({ useDeck: jest.fn() }));
 jest.mock('../src/lib/api', () => ({
   api: { getDueWords: jest.fn(), getWordStats: jest.fn(), submitReview: jest.fn() },
@@ -33,6 +37,8 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 jest.mock('../src/lib/audio', () => ({ downloadPronunciation: jest.fn() }));
 
 const sdk = jest.mocked(api);
+const storage = jest.mocked(AsyncStorage);
+const disk = new Map<string, string>();
 const mockNavigation = { isFocused: jest.fn(), addListener: jest.fn() };
 const navigationListeners = new Map<string, () => void>();
 let emitAppState: (state: AppStateStatus) => void;
@@ -53,6 +59,10 @@ function deferred<T>() {
   let reject!: (reason: Error) => void;
   const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
   return { promise, resolve, reject };
+}
+
+function savedStats(stats: WordStats, userId = 'learner') {
+  return JSON.stringify({ version: 1, userId, stats });
 }
 
 async function mount(screen: React.ReactElement) {
@@ -85,6 +95,10 @@ async function press(label: string) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  disk.clear();
+  storage.getItem.mockReset().mockImplementation(async (key) => disk.get(key) ?? null);
+  storage.setItem.mockReset().mockImplementation(async (key, value) => { disk.set(key, value); });
+  jest.mocked(useAuth).mockReturnValue({ user: { id: 'learner' } } as ReturnType<typeof useAuth>);
   jest.mocked(useDeck).mockReturnValue({ entries: [], syncing: false } as unknown as ReturnType<typeof useDeck>);
   sdk.getDueWords.mockReset().mockResolvedValue({ words: [first, second] });
   sdk.getWordStats.mockReset().mockResolvedValue({ total: 5, due: 2 });
@@ -252,6 +266,107 @@ it('ignores older Home counts when overlapping requests complete out of order', 
   await act(async () => { emitAppState('active'); });
   await act(async () => { oldLoad.resolve({ total: 5, due: 3 }); });
   expect(button('All caught up').props.disabled).toBe(true);
+});
+
+it('shows saved Home counts before a slow refresh completes, then persists the fresh counts', async () => {
+  disk.set('voca:home-stats:v1:learner', savedStats({ total: 7, due: 3 }));
+  const pending = deferred<WordStats>();
+  sdk.getWordStats.mockReturnValueOnce(pending.promise);
+  await mount(<HomeScreen />);
+  expect(textContent()).toContain('Saved counts · Updating…');
+  expect(textContent()).toContain('3\nwords due for review');
+  expect(root.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+  expect(button('Start Review').props.disabled).toBe(false);
+  expect(sdk.getWordStats).toHaveBeenCalledWith('learner');
+  await act(async () => { pending.resolve({ total: 8, due: 1 }); });
+  expect(textContent()).toContain('1\nword due for review');
+  expect(textContent()).not.toContain('Saved counts');
+  expect(JSON.parse(disk.get('voca:home-stats:v1:learner')!).stats).toEqual({ total: 8, due: 1 });
+});
+
+it('keeps known Home counts visible through a slow refresh and failure', async () => {
+  await mount(<HomeScreen />);
+  const pending = deferred<WordStats>();
+  sdk.getWordStats.mockReturnValueOnce(pending.promise);
+  await act(async () => { emitAppState('active'); });
+  expect(textContent()).toContain('2\nwords due for review');
+  expect(textContent()).toContain('Saved counts · Updating…');
+  expect(root.root.findAllByType(ActivityIndicator)).toHaveLength(0);
+  await act(async () => { pending.reject(new Error('offline')); });
+  expect(textContent()).toContain("Showing saved counts. Couldn't refresh.");
+  expect(textContent()).toContain('2\nwords due for review');
+  expect(button('Try again')).toBeDefined();
+  await press('Try again');
+  expect(textContent()).not.toContain('Showing saved counts');
+});
+
+it('does not declare caught up from saved zero counts when the server is unavailable', async () => {
+  disk.set('voca:home-stats:v1:learner', savedStats({ total: 7, due: 0 }));
+  sdk.getWordStats.mockRejectedValueOnce(new Error('offline'));
+  await mount(<HomeScreen />);
+  expect(textContent()).toContain("Showing saved counts. Couldn't refresh.");
+  expect(textContent()).not.toContain('All caught up');
+  expect(button('Check Review').props.disabled).toBe(false);
+  await press('Check Review');
+  expect(router.push).toHaveBeenCalledWith('/(tabs)/review');
+});
+
+it('does not let late cache hydration replace newer Home counts', async () => {
+  const pending = deferred<string | null>();
+  storage.getItem.mockReturnValueOnce(pending.promise);
+  sdk.getWordStats.mockResolvedValueOnce({ total: 9, due: 0 });
+  await mount(<HomeScreen />);
+  expect(button('All caught up').props.disabled).toBe(true);
+  await act(async () => { pending.resolve(savedStats({ total: 7, due: 3 })); });
+  expect(button('All caught up').props.disabled).toBe(true);
+  expect(textContent()).not.toContain('Saved counts');
+  expect(textContent()).toContain('9');
+});
+
+it('hides the previous account cache and ignores its pending Home response after an account switch', async () => {
+  disk.set('voca:home-stats:v1:learner', savedStats({ total: 7, due: 3 }));
+  const oldLoad = deferred<WordStats>();
+  const nextLoad = deferred<WordStats>();
+  sdk.getWordStats.mockReturnValueOnce(oldLoad.promise).mockReturnValueOnce(nextLoad.promise);
+  await mount(<HomeScreen />);
+  expect(textContent()).toContain('3\nwords due for review');
+  jest.mocked(useAuth).mockReturnValue({ user: { id: 'other' } } as ReturnType<typeof useAuth>);
+  await act(async () => { root.update(<HomeScreen />); });
+  expect(textContent()).not.toContain('words due for review');
+  expect(root.root.findByType(ActivityIndicator)).toBeDefined();
+  await act(async () => { oldLoad.resolve({ total: 50, due: 50 }); });
+  expect(textContent()).not.toContain('50');
+  expect(sdk.getWordStats.mock.calls).toEqual([['learner'], ['other']]);
+  await act(async () => { nextLoad.resolve({ total: 4, due: 1 }); });
+  expect(textContent()).toContain('1\nword due for review');
+  expect(JSON.parse(disk.get('voca:home-stats:v1:other')!).stats).toEqual({ total: 4, due: 1 });
+  expect(JSON.parse(disk.get('voca:home-stats:v1:learner')!).stats).toEqual({ total: 7, due: 3 });
+});
+
+it('shows successful Home counts even when cache reads and writes fail', async () => {
+  storage.getItem.mockRejectedValueOnce(new Error('unavailable'));
+  storage.setItem.mockRejectedValueOnce(new Error('full'));
+  await mount(<HomeScreen />);
+  expect(textContent()).toContain('2\nwords due for review');
+  expect(textContent()).not.toContain("Couldn't");
+  expect(textContent()).not.toContain('Saved counts');
+});
+
+it('shows saved Home counts while waiting for a review save, then requests the updated counts', async () => {
+  disk.set('voca:home-stats:v1:learner', savedStats({ total: 2, due: 2 }));
+  const save = deferred<{ word: Word }>();
+  sdk.submitReview.mockReturnValueOnce(save.promise);
+  await mount(<ReviewScreen />);
+  act(() => { void button('Good').props.onPress(); });
+  await act(async () => { root.update(<HomeScreen />); });
+  expect(sdk.getWordStats).not.toHaveBeenCalled();
+  expect(textContent()).toContain('2\nwords due for review');
+  expect(textContent()).toContain('Saved counts · Updating…');
+  sdk.getWordStats.mockResolvedValueOnce({ total: 2, due: 1 });
+  await act(async () => { save.resolve({ word: first }); });
+  expect(sdk.getWordStats).toHaveBeenCalledTimes(1);
+  expect(textContent()).toContain('1\nword due for review');
+  expect(textContent()).not.toContain('Saved counts');
 });
 
 it.each([false, true])('waits for a review save before fetching Home counts (failure: %s)', async (failure) => {

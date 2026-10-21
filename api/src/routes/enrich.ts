@@ -1,6 +1,5 @@
 import { Router } from 'express';
-import { createHash } from 'node:crypto';
-import { synthesizeSpeech } from '../lib/elevenlabs';
+import { getPronunciationFilename, getSpeechConfig, synthesizeSpeech } from '../lib/elevenlabs';
 import { supabaseAdmin, STORAGE_BUCKET } from '../lib/supabaseAdmin';
 import { findIllustrationUrl } from '../lib/unsplash';
 import { findDefinition } from '../lib/definition';
@@ -25,27 +24,40 @@ export function createEnrichmentRouter({
     if (!word) return { status: 404, body: { error: 'word not found' } };
 
     const bucket = database.storage.from(STORAGE_BUCKET);
-    // A renamed word must never reuse audio generated for its old spelling.
-    const filename = `${createHash('sha256').update(word.term).digest('hex')}.mp3`;
+    // Voice/model changes need a new immutable URL, including on devices that
+    // have already cached the old pronunciation for this spelling.
+    const speechConfig = getSpeechConfig();
+    const filename = getPronunciationFilename(word.term, speechConfig);
     const directory = `${userId}/${word.id}`;
     const audioPath = `${directory}/${filename}`;
+    const audioUrl = bucket.getPublicUrl(audioPath).data.publicUrl;
+    const metadata = { ...word.enrichment, version: 1 };
     const pronunciation = async () => {
-      if (word.pronunciation_url) return word.pronunciation_url as string;
+      if (word.pronunciation_url === audioUrl && metadata.audio_cache_key === speechConfig.cacheKey) {
+        metadata.audio_version = 2;
+        return word.pronunciation_url as string;
+      }
+      // Keep the previous playable URL on failure, but don't let a later list
+      // refresh mark an outdated voice profile complete and cancel its retry.
+      delete metadata.audio_version;
       // Recover a prior upload even if its database update/response was lost.
       const { data: files, error: listError } = await bucket.list(directory, { search: filename });
       if (listError) throw listError;
       if (!files?.some((file) => file.name === filename)) {
-        const bytes = await speech(word.term);
+        const bytes = await speech(word.term, speechConfig);
         if (!bytes.length) throw new Error('Empty pronunciation');
         const { error: uploadError } = await bucket.upload(audioPath, bytes, {
           contentType: 'audio/mpeg', cacheControl: '31536000', upsert: true,
         });
         if (uploadError) throw uploadError;
       }
-      return bucket.getPublicUrl(audioPath).data.publicUrl;
+      metadata.audio_version = 2;
+      metadata.audio_cache_key = speechConfig.cacheKey;
+      metadata.audio_voice_id = speechConfig.voiceId;
+      metadata.audio_model_id = speechConfig.modelId;
+      return audioUrl;
     };
 
-    const metadata = { ...word.enrichment, version: 1 };
     const meaning = async () => {
       if (word.definition?.trim()) {
         metadata.definition_status = 'ready';
@@ -65,11 +77,12 @@ export function createEnrichmentRouter({
         metadata.image_status = 'ready';
         return word.image_url as string;
       }
-      if (metadata.image_status === 'not_found') return null;
+      if (metadata.image_status === 'not_found' && metadata.image_search_version === 2) return null;
       // A failed dictionary lookup should not lock in a poor rare-word search.
       const text = await meaningTask;
       const result = await illustration(word.term, text);
       metadata.image_status = result ? 'ready' : 'not_found';
+      metadata.image_search_version = 2;
       metadata.image_source = result?.source ?? null;
       return result?.url ?? null;
     };

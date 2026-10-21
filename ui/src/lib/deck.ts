@@ -21,10 +21,12 @@ export interface DeckState {
 export const emptyDeck: DeckState = { entries: [], loaded: false, syncing: false, message: null };
 const needsWork = (entry: SavedWord) => !entry.enrichmentComplete || (supportsOfflineAudio && !entry.audioReady);
 const contentComplete = (word: Word) => word.enrichment?.version === 1 &&
+  word.enrichment.audio_version === 2 && Boolean(word.pronunciation_url) &&
   (Boolean(word.definition) || word.enrichment.definition_status === 'not_found') &&
-  (word.enrichment.image_status === 'ready' || word.enrichment.image_status === 'not_found');
+  ((word.enrichment.image_status === 'ready' && Boolean(word.image_url)) ||
+    (word.enrichment.image_status === 'not_found' && word.enrichment.image_search_version === 2));
 const newEntry = (word: Word): SavedWord => ({
-  word, enrichmentComplete: Boolean(word.pronunciation_url) && contentComplete(word),
+  word, enrichmentComplete: contentComplete(word),
   audioReady: false, attempts: 0, retryAt: 0,
 });
 
@@ -78,8 +80,12 @@ export class DeckStore {
           );
           // Recheck files instead of trusting a persisted "ready" label.
           for (const entry of entries) {
-            // Old caches called audio + an arbitrary photo "complete".
-            if (!contentComplete(entry.word)) { entry.enrichmentComplete = false; entry.retryAt = 0; }
+            // Revisit older audio and image misses once, while preserving
+            // durable backoff for work that has already been retried.
+            if (entry.enrichmentComplete && !contentComplete(entry.word)) {
+              entry.enrichmentComplete = false;
+              entry.retryAt = 0;
+            }
             entry.audioReady = Boolean(entry.word.pronunciation_url && await getLocalPronunciationUri(
               this.userId, entry.word.id, entry.word.pronunciation_url
             ));
@@ -149,7 +155,7 @@ export class DeckStore {
       const warning = await this.saveMutation((entries) => entries.map((entry) => entry.word.id !== id ? entry :
         changedTerm ? newEntry(word) : {
           ...entry, word,
-          enrichmentComplete: Boolean(word.pronunciation_url) && contentComplete(word),
+          enrichmentComplete: contentComplete(word),
           audioReady: entry.audioReady && entry.word.pronunciation_url === word.pronunciation_url,
         }));
       if (changedTerm) this.clearAudio(id);
@@ -220,7 +226,7 @@ export class DeckStore {
                 if (!old || capitalizeWords(old.word.term) !== capitalizeWords(word.term)) return newEntry(word);
                 return {
                   ...old, word,
-                  enrichmentComplete: Boolean(word.pronunciation_url) && contentComplete(word),
+                  enrichmentComplete: contentComplete(word),
                   audioReady: old.audioReady && old.word.pronunciation_url === word.pronunciation_url,
                 };
               }),
@@ -250,7 +256,7 @@ export class DeckStore {
             if (result.word.user_id !== this.userId || result.word.id !== current.word.id) throw new Error('Account mismatch');
             current = {
               ...current, word: result.word,
-              enrichmentComplete: !result.enrichment_pending && Boolean(result.word.pronunciation_url),
+              enrichmentComplete: !result.enrichment_pending && contentComplete(result.word),
               audioReady: current.audioReady && current.word.pronunciation_url === result.word.pronunciation_url,
             };
             await this.replace(current, version);

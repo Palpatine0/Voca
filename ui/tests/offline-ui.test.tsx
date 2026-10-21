@@ -27,6 +27,10 @@ const word: Word = {
   pronunciation_url: null, image_url: null, easiness_factor: 2.5, interval: 0,
   repetitions: 0, next_review_at: '2026-10-07T00:00:00Z', last_reviewed_at: null, created_at: '2026-10-07T00:00:00Z',
 };
+const completeWord: Word = {
+  ...word, pronunciation_url: 'https://audio.test/word.mp3',
+  enrichment: { version: 1, audio_version: 2, image_search_version: 2, definition_status: 'ready', image_status: 'not_found' },
+};
 let root: ReactTestRenderer;
 let emitState: (state: AppStateStatus) => void;
 const remove = jest.fn();
@@ -50,7 +54,7 @@ beforeEach(() => {
   storage.setItem.mockImplementation(async (key, value) => { disk.set(key, value); });
   sdk.getWords.mockReset().mockResolvedValue({ words: [] });
   sdk.createWord.mockResolvedValue({ word });
-  sdk.enrichWord.mockResolvedValue({ word: { ...word, pronunciation_url: 'https://audio.test/word.mp3' }, pronunciation_available: true, image_available: false, enrichment_pending: false });
+  sdk.enrichWord.mockResolvedValue({ word: completeWord, pronunciation_available: true, image_available: false, enrichment_pending: false });
   jest.mocked(getLocalPronunciationUri).mockResolvedValue('file:///audio.mp3');
   jest.mocked(AppState.addEventListener).mockImplementation((_event, callback) => { emitState = callback; return { remove }; });
 });
@@ -82,7 +86,7 @@ it('does not report queued or offline-ready work after local storage fails', asy
 
 it('exposes saved words and audio in Library after an offline restart', async () => {
   disk.set('voca:deck:v1:user', JSON.stringify({ version: 1, entries: [{
-    word: { ...word, pronunciation_url: 'https://audio.test/word.mp3' }, enrichmentComplete: true, audioReady: true, attempts: 0, retryAt: 0,
+    word: completeWord, enrichmentComplete: true, audioReady: true, attempts: 0, retryAt: 0,
   }] }));
   sdk.getWords.mockRejectedValue(new Error('offline'));
   await mount(<LibraryScreen />);

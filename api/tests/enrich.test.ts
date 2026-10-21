@@ -3,7 +3,7 @@ import { test, mock } from 'node:test';
 import type { TestContext } from 'node:test';
 import express from 'express';
 import type { AddressInfo } from 'node:net';
-import { createHash } from 'node:crypto';
+import { getPronunciationFilename, getSpeechConfig } from '../src/lib/elevenlabs';
 
 process.env.SUPABASE_URL = 'https://example.supabase.co';
 process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only';
@@ -28,7 +28,7 @@ async function fixture(t: TestContext) {
       files.add(path.split('/').at(-1)!);
       return { error: null };
     }),
-    getPublicUrl: () => ({ data: { publicUrl: 'https://audio.test/word.mp3' } }),
+    getPublicUrl: (path: string) => ({ data: { publicUrl: `https://audio.test/${path}` } }),
   };
   const filters: Array<Record<string, string | null>> = [];
   const database = {
@@ -134,7 +134,7 @@ test('recovers an uploaded MP3 after a failed database write without another TTS
   const f = await fixture(t);
   f.setFailures({ update: true });
   assert.equal((await f.post()).status, 500);
-  assert.ok(f.files.has(`${createHash('sha256').update('serene').digest('hex')}.mp3`));
+  assert.ok(f.files.has(getPronunciationFilename('serene')));
   f.setFailures({});
   assert.equal((await f.post()).body.enrichment_pending, false);
   assert.equal(f.speech.mock.callCount(), 1);
@@ -253,4 +253,58 @@ test('successful no-match results are saved and not repeatedly requested', async
   await f.post();
   assert.equal(f.definition.mock.callCount(), 1);
   assert.equal(f.illustration.mock.callCount(), 1);
+});
+
+test('replaces legacy pronunciation with a voice-specific URL and reuses only the current profile', async (t) => {
+  const f = await fixture(t);
+  f.edit({ pronunciation_url: 'https://audio.test/legacy-british.mp3' });
+  const first = await f.post();
+  const profile = getSpeechConfig();
+  assert.equal(first.body.word.pronunciation_url, `https://audio.test/user/word/${getPronunciationFilename('serene')}`);
+  assert.equal(first.body.word.enrichment.audio_version, 2);
+  assert.equal(first.body.word.enrichment.audio_voice_id, profile.voiceId);
+  assert.equal(first.body.word.enrichment.audio_cache_key, profile.cacheKey);
+  assert.equal(f.speech.mock.callCount(), 1);
+  await f.post();
+  assert.equal(f.speech.mock.callCount(), 1);
+});
+
+test('keeps playable audio when a versioned voice replacement fails without cancelling its retry', async (t) => {
+  const f = await fixture(t);
+  f.edit({ pronunciation_url: 'https://audio.test/legacy-british.mp3',
+    enrichment: { version: 1, audio_version: 2, audio_cache_key: 'outdated-profile' } });
+  f.setFailures({ speech: true });
+  const failed = await f.post();
+  assert.equal(failed.body.word.pronunciation_url, 'https://audio.test/legacy-british.mp3');
+  assert.equal(failed.body.word.enrichment.audio_version, undefined);
+  assert.equal(failed.body.enrichment_pending, true);
+  f.setFailures({});
+  const fixed = await f.post();
+  assert.equal(fixed.body.word.enrichment.audio_version, 2);
+  assert.notEqual(fixed.body.word.pronunciation_url, 'https://audio.test/legacy-british.mp3');
+});
+
+test('retries old no-match pictures once with the improved search and preserves existing ready pictures', async (t) => {
+  const f = await fixture(t);
+  f.edit({ definition: 'Sexual intercourse', enrichment: { version: 1, image_status: 'not_found' } });
+  const repaired = await f.post();
+  assert.equal(repaired.body.image_available, true);
+  assert.equal(repaired.body.word.enrichment.image_search_version, 2);
+  await f.post();
+  assert.equal(f.illustration.mock.callCount(), 1);
+});
+
+test('does not repeatedly search a current no-match result or mark a failed search complete', async (t) => {
+  const f = await fixture(t);
+  f.edit({ definition: 'A rare concept', enrichment: { version: 1, image_status: 'not_found' } });
+  f.setFailures({ image: true });
+  const failed = await f.post();
+  assert.equal(failed.body.word.enrichment.image_search_version, undefined);
+  assert.equal(failed.body.enrichment_pending, true);
+  f.setFailures({});
+  f.illustration.mock.mockImplementation(async () => null);
+  const complete = await f.post();
+  assert.equal(complete.body.word.enrichment.image_search_version, 2);
+  await f.post();
+  assert.equal(f.illustration.mock.callCount(), 2);
 });

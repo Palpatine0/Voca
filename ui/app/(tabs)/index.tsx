@@ -1,33 +1,54 @@
 import { webContent } from '../../src/lib/layout';
 import { router, useFocusEffect } from 'expo-router';
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { GradientOrb } from '../../src/components/GradientOrb';
+import { useAuth } from '../../src/context/AuthContext';
 import { api, WordStats } from '../../src/lib/api';
+import { readHomeStats, saveHomeStats } from '../../src/lib/homeStats';
 import { TAB_DOCK_CLEARANCE } from '../../src/lib/navigation';
 import { waitForReviewSaves } from '../../src/lib/review';
 import { radii, spacing, typography, useTheme } from '../../src/lib/theme';
 
 export default function HomeScreen() {
   const theme = useTheme();
-  const [stats, setStats] = useState<WordStats | null>(null);
+  const { user } = useAuth();
+  const userId = user?.id;
+  const [snapshot, setSnapshot] = useState<{ owner: string; stats: WordStats; saved: boolean } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const focused = useRef(false);
   const requestId = useRef(0);
 
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    void readHomeStats(userId).then((stats) => {
+      if (!active || !stats) return;
+      // A delayed storage read must never replace a newer server response.
+      setSnapshot((current) => current?.owner === userId ? current : { owner: userId, stats, saved: true });
+    });
+    return () => { active = false; };
+  }, [userId]);
+
   const fetchStats = useCallback(async () => {
+    if (!userId) return;
     const request = ++requestId.current;
     setLoading(true);
     setError(false);
     try {
       await waitForReviewSaves();
       if (!focused.current || request !== requestId.current) return;
-      const data = await api.getWordStats();
-      if (focused.current && request === requestId.current) setStats(data);
+      const data = await api.getWordStats(userId);
+      if (focused.current && request === requestId.current) {
+        setSnapshot({ owner: userId, stats: data, saved: false });
+        // A cache write must not delay usable counts or turn a successful load
+        // into an error on a device with unavailable/full local storage.
+        void saveHomeStats(userId, data).catch(() => undefined);
+      }
     } catch {
       if (focused.current && request === requestId.current) setError(true);
     } finally {
@@ -36,7 +57,7 @@ export default function HomeScreen() {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [userId]);
 
   useFocusEffect(useCallback(() => {
     focused.current = true;
@@ -55,7 +76,9 @@ export default function HomeScreen() {
     setRefreshing(true);
     await fetchStats();
   };
-  const currentStats = !loading && !error ? stats : null;
+  const currentStats = snapshot && snapshot.owner === userId ? snapshot.stats : null;
+  const savedCounts = Boolean(currentStats && (snapshot?.saved || loading || error));
+  const confirmedCaughtUp = currentStats?.due === 0 && !savedCounts;
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.canvas }]}>
@@ -98,13 +121,13 @@ export default function HomeScreen() {
             <Text style={[typography.captionUppercase, { color: theme.colors.muted }]}>
               TODAY'S REVIEW
             </Text>
-            {loading ? (
+            {!currentStats && loading ? (
               <ActivityIndicator
                 accessibilityLabel="Loading review counts"
                 color={theme.colors.primary}
                 style={{ marginTop: spacing.lg }}
               />
-            ) : error ? (
+            ) : !currentStats && error ? (
               <>
                 <Text
                   accessibilityRole="alert"
@@ -133,21 +156,29 @@ export default function HomeScreen() {
 
                 <Pressable
                   onPress={() => router.push('/(tabs)/review')}
-                  disabled={currentStats.due === 0}
+                  disabled={confirmedCaughtUp}
                   style={({ pressed }) => [
                     styles.reviewButton,
                     {
                       backgroundColor: pressed
                         ? theme.colors.primaryActive
                         : theme.colors.primary,
-                      opacity: currentStats.due === 0 ? 0.4 : 1,
+                      opacity: confirmedCaughtUp ? 0.4 : 1,
                     },
                   ]}
                 >
                   <Text style={[typography.button, { color: theme.colors.onPrimary }]}>
-                    {currentStats.due > 0 ? 'Start Review' : 'All caught up'}
+                    {confirmedCaughtUp ? 'All caught up' : currentStats.due > 0 ? 'Start Review' : 'Check Review'}
                   </Text>
                 </Pressable>
+                {savedCounts && (
+                  <Text style={[typography.caption, { color: theme.colors.muted, marginTop: spacing.sm, textAlign: 'center' }]}>
+                    {error ? "Showing saved counts. Couldn't refresh." : 'Saved counts · Updating…'}
+                  </Text>
+                )}
+                {error && (
+                  <Button label="Try again" variant="outline" onPress={fetchStats} style={{ marginTop: spacing.sm }} />
+                )}
               </>
             )}
           </View>

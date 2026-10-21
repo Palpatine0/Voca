@@ -1,4 +1,6 @@
 const { timingSafeEqual } = require('node:crypto');
+// Sarah: American English. Keep api/src/lib/elevenlabs.ts aligned.
+const DEFAULT_VOICE_ID = 'EXAVITQu4vr4xnSDxMaL';
 
 // This route is called only by the authenticated Voca API. The separate secret
 // stays on the servers; neither it nor the ElevenLabs key enters the web bundle.
@@ -18,7 +20,8 @@ function createPronunciationHandler({ fetcher = fetch, env = process.env } = {})
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
       return res.status(401).json({ error: 'unauthorized' });
     }
-    const { text, voiceId = 'JBFqnCBsd6RMkjVDRZzb', modelId = 'eleven_multilingual_v2' } = req.body || {};
+    const { text, voiceId = env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID,
+      modelId = env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2' } = req.body || {};
     if (typeof text !== 'string' || !text.trim() || text.length > 200 ||
         typeof voiceId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(voiceId) ||
         typeof modelId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(modelId)) {

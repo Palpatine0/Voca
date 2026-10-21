@@ -40,8 +40,21 @@ test('returns real MP3 bytes with private caching and keeps keys out of the resp
   assert.equal(result.headers['Content-Type'], 'audio/mpeg');
   assert.equal(result.headers['Cache-Control'], 'no-store');
   assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0][0], 'https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL?output_format=mp3_44100_128');
   assert.equal(result.calls[0][1].headers['xi-api-key'], env.ELEVENLABS_API_KEY);
   assert.deepEqual(JSON.parse(result.calls[0][1].body), { text: 'Deep Blue', model_id: 'eleven_multilingual_v2' });
+});
+
+test('uses configured speech settings unless the authenticated API sends a specific profile', async () => {
+  const configured = { ...env, ELEVENLABS_VOICE_ID: 'configured-voice', ELEVENLABS_MODEL_ID: 'configured-model' };
+  const fallback = await call({ configured });
+  assert.equal(fallback.code, 200);
+  assert.equal(fallback.calls[0][0], 'https://api.elevenlabs.io/v1/text-to-speech/configured-voice?output_format=mp3_44100_128');
+  assert.equal(JSON.parse(fallback.calls[0][1].body).model_id, 'configured-model');
+  const requested = await call({ configured, body: { text: 'Deep Blue', voiceId: 'chosen-voice', modelId: 'chosen-model' } });
+  assert.equal(requested.code, 200);
+  assert.equal(requested.calls[0][0], 'https://api.elevenlabs.io/v1/text-to-speech/chosen-voice?output_format=mp3_44100_128');
+  assert.equal(JSON.parse(requested.calls[0][1].body).model_id, 'chosen-model');
 });
 
 test('rejects provider errors, HTML masquerading as audio, and empty responses', async () => {

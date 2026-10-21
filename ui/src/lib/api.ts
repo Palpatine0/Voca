@@ -12,34 +12,50 @@ class ApiError extends Error {
 async function request<T>(
   path: string,
   init: RequestInit = {},
-  expectedUserId?: string
+  expectedUserId?: string,
+  timeoutMs = 60_000
 ): Promise<T> {
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (expectedUserId && session?.user.id !== expectedUserId) {
-    throw new ApiError(401, 'Account changed. Please try again.');
-  }
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...((init.headers as Record<string, string>) ?? {}),
-  };
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
-  }
-
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 60_000);
-  try {
+  const timeoutError = new ApiError(408, 'The server is taking too long to respond. Please try again.');
+  let timeout: ReturnType<typeof setTimeout>;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => {
+      reject(timeoutError);
+      controller.abort();
+    }, timeoutMs);
+  });
+
+  const performRequest = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    // Session refresh can stall before fetch starts. A late refresh must not
+    // send a request (especially a mutation) after its caller has timed out.
+    if (controller.signal.aborted) throw timeoutError;
+    if (expectedUserId && session?.user.id !== expectedUserId) {
+      throw new ApiError(401, 'Account changed. Please try again.');
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...((init.headers as Record<string, string>) ?? {}),
+    };
+    if (session?.access_token) {
+      headers.Authorization = `Bearer ${session.access_token}`;
+    }
+
     const res = await fetch(`${API_URL}${path}`, { ...init, headers, signal: controller.signal });
     const text = await res.text();
     const data = text ? JSON.parse(text) : null;
     if (!res.ok) throw new ApiError(res.status, data?.error || res.statusText);
     return data as T;
+  };
+
+  try {
+    return await Promise.race([performRequest(), deadline]);
   } finally {
-    clearTimeout(timeout);
+    clearTimeout(timeout!);
   }
 }
 
@@ -56,6 +72,11 @@ export interface Word {
   image_url: string | null;
   enrichment?: {
     version?: number;
+    audio_version?: number;
+    audio_cache_key?: string;
+    audio_voice_id?: string;
+    audio_model_id?: string;
+    image_search_version?: number;
     definition_status?: 'pending' | 'ready' | 'not_found';
     image_status?: 'pending' | 'ready' | 'not_found';
     definition_source?: { name: string; url: string; license: string; license_url: string } | null;
@@ -83,7 +104,7 @@ export const api = {
 
   getWords: (userId?: string) => request<{ words: Word[] }>('/words', {}, userId),
   getDueWords: () => request<{ words: Word[] }>('/words/due'),
-  getWordStats: () => request<WordStats>('/words/stats'),
+  getWordStats: (userId?: string) => request<WordStats>('/words/stats', {}, userId, 15_000),
 
   scanPhoto: (imageBase64: string, userId: string) =>
     request<{ words: string[]; truncated: boolean }>('/ocr', {

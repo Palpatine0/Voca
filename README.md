@@ -258,7 +258,18 @@ provider fails, returns `enrichment_pending`, and retries only unfinished lookup
 MP3 is reused after a failed database update. Overlapping requests for the same
 word are coalesced within one API process; this is not a distributed job lock.
 A successful search with no match is saved as `not_found`; a missing key or
-provider outage remains retryable. API and UI should be deployed together for the new response field.
+provider outage remains retryable. Image-search version 2 retries older misses
+once, uses meaning-based photo queries, and uses non-graphic relationship imagery
+for sexual vocabulary. These are credited Unsplash photos, not generated artwork.
+Current no-match results stay terminal so an unavailable photo does not cause
+endless searches. Existing relevant pictures are preserved.
+
+Pronunciation defaults to Sarah, an American English ElevenLabs voice
+(`EXAVITQu4vr4xnSDxMaL`). Audio version 2 records its voice/model profile and hashes
+that profile with the term into the storage filename. Existing British recordings
+are replaced through enrichment with new URLs, which also invalidate device audio
+caches. A failed replacement keeps the previous playable audio while retrying.
+Deploy API and UI together so older completed caches are reopened for this upgrade.
 
 `npm --prefix ui run test:offline` tests restart recovery, account isolation,
 backoff, partial downloads, honest save feedback, and stalled API requests.
@@ -437,6 +448,13 @@ failure. Unsplash photos include photographer credits and selection tracking. Ke
 credentials through the provider dashboards and Koyeb secret storage.
 
 The free backend can sleep after inactivity, so its first request may be slower.
+Home saves the last successful word counts separately for each signed-in account
+and shows them immediately on later visits while fetching current counts. Saved
+counts are labeled until refreshed; a saved zero does not disable checking Review.
+A failed refresh keeps those counts visible with a retry button. The count request
+has a 15-second deadline covering session refresh and response loading; other API
+operations retain their 60-second deadline. This improves repeat visits without
+changing the backend's free hosting plan or its wake-up behavior.
 
 ### Native builds
 

@@ -38,6 +38,61 @@ test('uses a phobia subject and refuses unrelated photo descriptions', () => {
   assert.equal(selectRelevantPhoto([unrelated], 'stars celestial space'), undefined);
 });
 
+test('uses a medication definition\'s treatment subject instead of receptor jargon', () => {
+  assert.deepEqual(illustrationQueries('Example medicine',
+    'Medication for the treatment of type 2 diabetes and obesity'),
+  ['example medicine', 'diabetes medication', 'diabetes care']);
+  assert.equal(selectRelevantPhoto([photo('Skin care and beauty products')], 'diabetes care'), undefined);
+  const relevant = photo('Diabetes care with a blood glucose monitor');
+  assert.equal(selectRelevantPhoto([relevant], 'diabetes care'), relevant);
+});
+
+test('uses only non-graphic relationship queries for sexual vocabulary', () => {
+  assert.deepEqual(illustrationQueries('Coitus', 'Sexual intercourse'),
+    ['couple holding hands', 'couple embrace']);
+  assert.deepEqual(illustrationQueries('Coitus'), ['couple holding hands', 'couple embrace']);
+  assert.equal(selectRelevantPhoto([photo('Man holding a camera in his hands')], 'couple holding hands'), undefined);
+  const relevant = photo('Couples holding hands on the beach');
+  assert.equal(selectRelevantPhoto([relevant], 'couple holding hands'), relevant);
+});
+
+test('matches ordinary singular and plural subjects without dropping the final e', () => {
+  const relevant = photo('Open spaces under the stars');
+  assert.equal(selectRelevantPhoto([relevant], 'space'), relevant);
+});
+
+test('illustrates tirzepatide with injection equipment, not an unrelated pill or writing pen', () => {
+  assert.deepEqual(illustrationQueries('Tirzepatide',
+    'Medication (GLP-1 agonist) for the treatment of type 2 diabetes and obesity'),
+  ['tirzepatide', 'injection']);
+  const relevant = photo('A gloved hand holding two syringes for medical treatments and injections');
+  assert.equal(selectRelevantPhoto([photo('Pastel pens'), photo('Vitamin pills'), relevant], 'injection'), relevant);
+  assert.equal(selectRelevantPhoto([photo('Pastel pens'), photo('Vitamin pills')], 'injection'), undefined);
+});
+
+test('tries a grounded fallback after an empty drug search and keeps high filtering', async (t) => {
+  const previous = process.env.UNSPLASH_ACCESS_KEY;
+  process.env.UNSPLASH_ACCESS_KEY = 'test-only';
+  const queries: string[] = [];
+  const fetcher = mock.method(globalThis, 'fetch', async (url: any) => {
+    const request = new URL(String(url));
+    if (request.pathname === '/search/photos') {
+      const query = request.searchParams.get('query')!;
+      queries.push(query);
+      assert.equal(request.searchParams.get('content_filter'), 'high');
+      return new Response(JSON.stringify({ results: query === 'injection'
+        ? [photo('A gloved hand holding two syringes for medical treatments and injections')] : [] }));
+    }
+    return new Response('{}');
+  });
+  t.after(() => { fetcher.mock.restore(); if (previous === undefined) delete process.env.UNSPLASH_ACCESS_KEY; else process.env.UNSPLASH_ACCESS_KEY = previous; });
+  const result = await findIllustrationUrl('Tirzepatide',
+    'Medication (GLP-1 agonist) for the treatment of type 2 diabetes and obesity');
+  assert.deepEqual(queries, ['tirzepatide', 'injection']);
+  assert.equal(result?.url, 'https://images.unsplash.com/photo-test');
+  assert.equal(String(fetcher.mock.calls.at(-1)!.arguments[0]), 'https://api.unsplash.com/photos/test/download');
+});
+
 test('hotlinks the matched photo, credits its photographer, and registers its selection', async (t) => {
   const previous = process.env.UNSPLASH_ACCESS_KEY;
   process.env.UNSPLASH_ACCESS_KEY = 'test-only';

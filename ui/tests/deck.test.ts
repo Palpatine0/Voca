@@ -26,7 +26,7 @@ const bare: Word = {
   pronunciation_url: null, image_url: null, easiness_factor: 2.5, interval: 0,
   repetitions: 0, next_review_at: '2026-10-07T00:00:00Z', last_reviewed_at: null, created_at: '2026-10-07T00:00:00Z',
 };
-const enriched = { ...bare, enrichment: { version: 1, definition_status: 'ready' as const, image_status: 'ready' as const }, pronunciation_url: 'https://example.com/audio.mp3', image_url: 'https://example.com/image.jpg' };
+const enriched = { ...bare, enrichment: { version: 1, audio_version: 2, image_search_version: 2, definition_status: 'ready' as const, image_status: 'ready' as const }, pronunciation_url: 'https://example.com/audio.mp3', image_url: 'https://example.com/image.jpg' };
 const result = { word: enriched, enrichment_pending: false, pronunciation_available: true, image_available: true };
 let state: DeckState;
 let store: DeckStore;
@@ -284,6 +284,75 @@ it('repairs an old completed cache that has a photo but no definition', async ()
   await store.sync(false, false);
   expect(sdk.enrichWord).toHaveBeenCalledWith('word', 'user');
   expect(state.entries[0].word.definition).toBe('Calm');
+});
+
+it.each([
+  ['older audio', { ...enriched, enrichment: { ...enriched.enrichment, audio_version: undefined } }],
+  ['an older image miss', { ...enriched, image_url: null, enrichment: { ...enriched.enrichment, image_status: 'not_found' as const, image_search_version: undefined } }],
+])('revisits %s in a completed saved word once', async (_label, oldWord) => {
+  disk.set('voca:deck:v1:user', JSON.stringify({ version: 1, entries: [{
+    word: oldWord, enrichmentComplete: true, audioReady: true, attempts: 6, retryAt: Date.now() + 900000,
+  }] }));
+  audioFiles.set('user/word', oldWord.pronunciation_url);
+  await store.sync(false, false);
+  expect(sdk.enrichWord).toHaveBeenCalledTimes(1);
+  expect(state.entries[0]).toMatchObject({ word: enriched, enrichmentComplete: true, attempts: 0, retryAt: 0 });
+  store.dispose();
+  store = new DeckStore('user', (value) => { state = value; });
+  await store.sync(false, false);
+  expect(sdk.enrichWord).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  ['an existing picture', { ...enriched, enrichment: { ...enriched.enrichment, image_search_version: undefined } }],
+  ['a current image miss', { ...enriched, image_url: null, enrichment: { ...enriched.enrichment, image_status: 'not_found' as const } }],
+])('preserves %s without scheduling duplicate enrichment', async (_label, word) => {
+  await store.remember(word);
+  await store.sync(false, false);
+  expect(state.entries[0]).toMatchObject({ enrichmentComplete: true, audioReady: true });
+  store.dispose();
+  store = new DeckStore('user', (value) => { state = value; });
+  await store.sync(false, false);
+  expect(sdk.enrichWord).not.toHaveBeenCalled();
+});
+
+it('keeps obsolete enrichment responses pending and preserves their retry backoff on restart', async () => {
+  sdk.enrichWord.mockResolvedValueOnce({ ...result, word: { ...enriched, enrichment: { ...enriched.enrichment, audio_version: undefined } } });
+  await store.remember(bare);
+  await store.sync(false, false);
+  expect(state.entries[0]).toMatchObject({ enrichmentComplete: false, attempts: 1 });
+  const retryAt = state.entries[0].retryAt;
+  expect(retryAt).toBeGreaterThan(Date.now());
+  store.dispose();
+  store = new DeckStore('user', (value) => { state = value; });
+  await store.sync(false, false);
+  expect(state.entries[0].retryAt).toBe(retryAt);
+  expect(sdk.enrichWord).toHaveBeenCalledTimes(1);
+  await store.sync(true, false);
+  expect(sdk.enrichWord).toHaveBeenCalledTimes(2);
+  expect(state.entries[0].enrichmentComplete).toBe(true);
+});
+
+it('invalidates old downloaded audio when American enrichment returns a new URL', async () => {
+  const oldUrl = 'https://example.com/british.mp3';
+  disk.set('voca:deck:v1:user', JSON.stringify({ version: 1, entries: [{
+    word: { ...enriched, pronunciation_url: oldUrl, enrichment: { ...enriched.enrichment, audio_version: undefined } },
+    enrichmentComplete: true, audioReady: true, attempts: 0, retryAt: 0,
+  }] }));
+  audioFiles.set('user/word', oldUrl);
+  audio.mockRejectedValueOnce(new Error('offline'));
+  await store.sync(false, false);
+  expect(state.entries[0]).toMatchObject({ word: enriched, enrichmentComplete: true, audioReady: false, attempts: 1 });
+  expect(audio).toHaveBeenCalledWith('user', 'word', enriched.pronunciation_url);
+  expect(audioFiles.get('user/word')).toBe(oldUrl);
+  store.dispose();
+  store = new DeckStore('user', (value) => { state = value; });
+  await store.load();
+  expect(state.entries[0].audioReady).toBe(false);
+  await store.sync(true, false);
+  expect(state.entries[0].audioReady).toBe(true);
+  expect(audioFiles.get('user/word')).toBe(enriched.pronunciation_url);
+  expect(sdk.enrichWord).toHaveBeenCalledTimes(1);
 });
 
 it('a later audio failure does not discard a completed definition or cause duplicate image work', async () => {
