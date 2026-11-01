@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import cors from 'cors';
+import { startEnrichmentRecovery } from './lib/enrichmentRecovery';
 import express from 'express';
 import enrichRouter from './routes/enrich';
 import ocrRouter from './routes/ocr';
@@ -33,5 +34,6 @@ app.use(
 );
 
 app.listen(PORT, HOST, () => {
+  startEnrichmentRecovery();
   console.log(`Voca server listening on http://${HOST}:${PORT}`);
 });

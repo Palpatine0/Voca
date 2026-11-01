@@ -77,8 +77,8 @@ async function fixture(t: TestContext) {
     server.closeAllConnections();
   }));
   const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}/enrich`;
-  const post = async (user = 'user') => {
-    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: user }, body: JSON.stringify({ word_id: 'word' }) });
+  const post = async (user = 'user', retryMissing = false) => {
+    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: user }, body: JSON.stringify({ word_id: 'word', retry_missing: retryMissing }) });
     return { status: response.status, body: await response.json() as any };
   };
   return {
@@ -307,4 +307,38 @@ test('does not repeatedly search a current no-match result or mark a failed sear
   assert.equal(complete.body.word.enrichment.image_search_version, 2);
   await f.post();
   assert.equal(f.illustration.mock.callCount(), 2);
+});
+
+
+test('explicit retry revisits missing results while keeping successful audio and user definitions', async (t) => {
+  const f = await fixture(t);
+  await f.post();
+  f.edit({ definition: 'My own meaning', image_url: null,
+    enrichment: { ...f.currentWord().enrichment, image_status: 'not_found', image_search_version: 2 } });
+  const response = await f.post('user', true);
+  assert.equal(response.body.word.definition, 'My own meaning');
+  assert.equal(response.body.image_available, true);
+  assert.equal(f.speech.mock.callCount(), 1);
+  assert.equal(f.definition.mock.callCount(), 1);
+  assert.equal(f.illustration.mock.callCount(), 2);
+});
+
+test('explicit retry bypasses a dictionary miss and persists failures for recovery', async (t) => {
+  const f = await fixture(t);
+  f.edit({ enrichment: { definition_status: 'not_found' } });
+  f.definition.mock.mockImplementationOnce(async () => { throw new Error('dictionary down'); });
+  const failed = await f.post('user', true);
+  assert.equal(failed.body.enrichment_pending, true);
+  assert.equal(failed.body.word.enrichment.definition_status, 'pending');
+  assert.equal(failed.body.word.enrichment.pending, true);
+  assert.ok(Date.parse(failed.body.word.enrichment.last_attempt_at));
+  const fixed = await f.post('user', true);
+  assert.equal(fixed.body.word.enrichment.pending, false);
+  assert.equal(fixed.body.definition_available, true);
+});
+
+test('explicit retry remains account scoped', async (t) => {
+  const f = await fixture(t);
+  assert.equal((await f.post('someone-else', true)).status, 404);
+  assert.equal(f.definition.mock.callCount(), 0);
 });

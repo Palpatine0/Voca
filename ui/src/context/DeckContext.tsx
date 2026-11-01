@@ -8,6 +8,7 @@ interface DeckContextValue extends DeckState {
   remember: (word: Word) => Promise<void>;
   refresh: (force?: boolean) => Promise<void>;
   updateWord: (id: string, updates: Pick<Word, 'term' | 'definition'>) => Promise<string | null>;
+  regenerateWord: (id: string) => Promise<string | null>;
   removeWord: (id: string) => Promise<string | null>;
 }
 const DeckContext = createContext<DeckContextValue | null>(null);
@@ -46,13 +47,17 @@ export function DeckProvider({ children }: { children: React.ReactNode }) {
     if (!current.current) throw new Error('Deck is not ready');
     return current.current.updateWord(id, updates);
   }, []);
+  const regenerateWord = useCallback(async (id: string) => {
+    if (!current.current) throw new Error('Deck is not ready');
+    return current.current.regenerateWord(id);
+  }, []);
   const removeWord = useCallback(async (id: string) => {
     if (!current.current) throw new Error('Deck is not ready');
     return current.current.removeWord(id);
   }, []);
 
   return (
-    <DeckContext.Provider value={{ ...state, remember, refresh, updateWord, removeWord }}>
+    <DeckContext.Provider value={{ ...state, remember, refresh, updateWord, regenerateWord, removeWord }}>
       {children}
     </DeckContext.Provider>
   );

@@ -5,19 +5,16 @@ import { findIllustrationUrl } from '../lib/unsplash';
 import { findDefinition } from '../lib/definition';
 import { requireSession } from '../middleware/requireSession';
 
-export function createEnrichmentRouter({
+export function createEnrichmentService({
   database = supabaseAdmin,
   speech = synthesizeSpeech,
   illustration = findIllustrationUrl,
   definition = findDefinition,
-  authenticate = requireSession,
 } = {}) {
-  const router = Router();
-  router.use(authenticate);
   // Coalesce overlapping retries within this server process.
-  const running = new Map<string, Promise<{ status: number; body: object }>>();
+  const running = new Map<string, { task: Promise<{ status: number; body: object }>; retryMissing: boolean }>();
 
-  async function enrich(userId: string, wordId: string) {
+  async function enrich(userId: string, wordId: string, retryMissing: boolean) {
     const { data: word, error } = await database.from('words').select('*')
       .eq('id', wordId).eq('user_id', userId).maybeSingle();
     if (error) return { status: 500, body: { error: 'Unable to load word' } };
@@ -63,7 +60,7 @@ export function createEnrichmentRouter({
         metadata.definition_status = 'ready';
         return word.definition as string;
       }
-      if (metadata.definition_status === 'not_found') return null;
+      if (!retryMissing && metadata.definition_status === 'not_found') return null;
       const result = await definition(word.term);
       metadata.definition_status = result ? 'ready' : 'not_found';
       metadata.definition_source = result?.source ?? null;
@@ -77,7 +74,7 @@ export function createEnrichmentRouter({
         metadata.image_status = 'ready';
         return word.image_url as string;
       }
-      if (metadata.image_status === 'not_found' && metadata.image_search_version === 2) return null;
+      if (!retryMissing && metadata.image_status === 'not_found' && metadata.image_search_version === 2) return null;
       // A failed dictionary lookup should not lock in a poor rare-word search.
       const text = await meaningTask;
       const result = await illustration(word.term, text);
@@ -87,6 +84,10 @@ export function createEnrichmentRouter({
       return result?.url ?? null;
     };
     const [audio, image, text] = await Promise.allSettled([pronunciation(), picture(), meaningTask]);
+    metadata.last_attempt_at = new Date().toISOString();
+    metadata.pending = audio.status === 'rejected' || image.status === 'rejected' || text.status === 'rejected';
+    if (text.status === 'rejected') metadata.definition_status = 'pending';
+    if (image.status === 'rejected') metadata.image_status = 'pending';
     if (audio.status === 'rejected') console.warn('[enrich] Pronunciation failed; retry pending');
     const updates: Record<string, unknown> = { enrichment: metadata };
     if (audio.status === 'fulfilled' && audio.value !== word.pronunciation_url) updates.pronunciation_url = audio.value;
@@ -104,7 +105,7 @@ export function createEnrichmentRouter({
       if (!result.data) return { status: 409, body: { error: 'Word changed. Refresh and retry enrichment.' } };
       updatedWord = result.data;
     }
-    // No match is terminal; outages retry without repeating completed lookups.
+    // Ordinary retries cache no-match results; daily/manual retries revisit them.
     return { status: 200, body: {
       word: updatedWord,
       definition_available: Boolean(updatedWord.definition),
@@ -114,25 +115,44 @@ export function createEnrichmentRouter({
     } };
   }
 
+  return async (userId: string, wordId: string, retryMissing = false) => {
+    const key = `${userId}/${wordId}`;
+    const existing = running.get(key);
+    if (existing) {
+      if (!retryMissing || existing.retryMissing) return existing.task;
+      await existing.task;
+      // An explicit retry must not be swallowed by an ordinary background lookup.
+      return run(userId, wordId, retryMissing);
+    }
+    return run(userId, wordId, retryMissing);
+  };
+
+  async function run(userId: string, wordId: string, retryMissing: boolean) {
+    const key = `${userId}/${wordId}`;
+    const existing = running.get(key);
+    if (existing) return existing.task;
+    const task = enrich(userId, wordId, retryMissing);
+    running.set(key, { task, retryMissing });
+    try { return await task; }
+    finally { if (running.get(key)?.task === task) running.delete(key); }
+  }
+}
+
+export const enrichWord = createEnrichmentService();
+
+export function createEnrichmentRouter({ authenticate = requireSession, ...providers }: Parameters<typeof createEnrichmentService>[0] & { authenticate?: typeof requireSession } = {}, service = createEnrichmentService(providers)) {
+  const router = Router();
+  router.use(authenticate);
   router.post('/', async (req, res, next) => {
-    const { word_id } = req.body;
+    const { word_id, retry_missing = false } = req.body ?? {};
     if (!word_id || typeof word_id !== 'string') return res.status(400).json({ error: 'word_id is required' });
-    const key = `${req.userId}/${word_id}`;
-    let task = running.get(key);
-    if (!task) {
-      task = enrich(req.userId!, word_id);
-      running.set(key, task);
-    }
+    if (typeof retry_missing !== 'boolean') return res.status(400).json({ error: 'retry_missing must be a boolean' });
     try {
-      const result = await task;
+      const result = await service(req.userId!, word_id, retry_missing);
       res.status(result.status).json(result.body);
-    } catch (error) {
-      next(error);
-    } finally {
-      if (running.get(key) === task) running.delete(key);
-    }
+    } catch (error) { next(error); }
   });
   return router;
 }
 
-export default createEnrichmentRouter();
+export default createEnrichmentRouter({}, enrichWord);

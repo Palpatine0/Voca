@@ -72,6 +72,8 @@ export interface Word {
   image_url: string | null;
   enrichment?: {
     version?: number;
+    last_attempt_at?: string;
+    pending?: boolean;
     audio_version?: number;
     audio_cache_key?: string;
     audio_voice_id?: string;
@@ -118,7 +120,7 @@ export const api = {
       body: JSON.stringify({ term, definition, client_id: clientId }),
     }, userId),
 
-  enrichWord: (wordId: string, userId?: string) =>
+  enrichWord: (wordId: string, userId?: string, retryMissing = false) =>
     request<{
       word: Word;
       image_available: boolean;
@@ -126,7 +128,7 @@ export const api = {
       enrichment_pending: boolean;
     }>('/enrich', {
       method: 'POST',
-      body: JSON.stringify({ word_id: wordId }),
+      body: JSON.stringify({ word_id: wordId, retry_missing: retryMissing }),
     }, userId),
 
   updateWord: (id: string, updates: Partial<Pick<Word, 'term' | 'definition'>>, userId?: string) =>

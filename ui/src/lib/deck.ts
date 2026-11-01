@@ -168,6 +168,26 @@ export class DeckStore {
     }
   }
 
+  async regenerateWord(id: string): Promise<string | null> {
+    await this.load();
+    this.beginMutation(id);
+    try {
+      const result = await api.enrichWord(id, this.userId, true);
+      const { word } = result;
+      if (!this.active || word.user_id !== this.userId || word.id !== id) throw new Error('Account changed. Please try again.');
+      const warning = await this.saveMutation((entries) => entries.map((entry) => entry.word.id !== id ? entry : {
+        ...newEntry(word),
+        enrichmentComplete: !result.enrichment_pending && contentComplete(word),
+        audioReady: entry.audioReady && entry.word.pronunciation_url === word.pronunciation_url,
+      }));
+      return warning || (result.enrichment_pending ? 'Some content is still unavailable. We’ll retry automatically.' :
+        (!word.definition || !word.image_url ? 'Retry complete. Some content still has no match.' : null));
+    } finally {
+      this.mutating.delete(id);
+      this.bump(id);
+    }
+  }
+
   async removeWord(id: string): Promise<string | null> {
     await this.load();
     this.beginMutation(id);

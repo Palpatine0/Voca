@@ -103,7 +103,7 @@ export function LibraryContent({ deck, focused }: { deck: ReturnType<typeof useD
         {!item.enrichmentComplete && item.audioReady && <Text style={[typography.caption, { color: theme.colors.muted }]}>Meaning or photo pending · will retry</Text>}
       </View>}
     />
-    {focused && selected && <WordEditor key={selected.id} word={selected} updateWord={deck.updateWord} removeWord={deck.removeWord}
+    {focused && selected && <WordEditor key={selected.id} word={selected} updateWord={deck.updateWord} regenerateWord={deck.regenerateWord} removeWord={deck.removeWord}
       onClose={() => setSelectedWord(null)} onSaved={setNotice} />}
   </SafeAreaView>;
 }

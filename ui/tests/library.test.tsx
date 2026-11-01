@@ -38,7 +38,7 @@ const renderedText = () => root.root.findAllByType(Text)
 async function mount() { await act(async () => { root = create(<LibraryContent deck={deck} focused />); }); }
 
 beforeEach(() => {
-  deck = { entries, loaded: true, syncing: false, message: null, remember: jest.fn(), refresh: jest.fn(async () => {}), updateWord: jest.fn(async () => null), removeWord: jest.fn(async () => null) };
+  deck = { entries, loaded: true, syncing: false, message: null, remember: jest.fn(), refresh: jest.fn(async () => {}), updateWord: jest.fn(async () => null), regenerateWord: jest.fn(async () => null), removeWord: jest.fn(async () => null) };
 });
 afterEach(() => { if (root) act(() => root.unmount()); });
 
@@ -114,4 +114,25 @@ it('closes details and audio when leaving Library, and distinguishes an empty de
   expect(root.root.findAllByType('Pronunciation' as never)).toHaveLength(0);
   act(() => root.update(<LibraryContent deck={{ ...deck, entries: [] }} focused />));
   expect(renderedText()).toContain('Your collection starts here');
+});
+
+
+it('retries missing content from details, blocks duplicates and shows failures', async () => {
+  await mount(); await press('Edit Serene');
+  jest.mocked(deck.regenerateWord).mockRejectedValueOnce(new Error('Network unavailable'));
+  await press('Regenerate missing content');
+  expect(renderedText()).toContain('Network unavailable');
+  const retry = button('Regenerate missing content').props.onPress;
+  await act(async () => { retry(); retry(); });
+  expect(deck.regenerateWord).toHaveBeenCalledTimes(2);
+  expect(deck.regenerateWord).toHaveBeenLastCalledWith('0');
+  expect(root.root.findAllByType(WordEditor)).toHaveLength(0);
+});
+
+it('requires saving local edits before regeneration', async () => {
+  await mount(); await press('Edit Serene');
+  act(() => input('Definition').props.onChangeText('My definition'));
+  expect(button('Regenerate missing content').props.disabled).toBe(true);
+  await press('Regenerate missing content');
+  expect(deck.regenerateWord).not.toHaveBeenCalled();
 });

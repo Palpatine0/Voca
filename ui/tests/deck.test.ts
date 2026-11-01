@@ -363,3 +363,14 @@ it('a later audio failure does not discard a completed definition or cause dupli
   expect(state.entries[0].word.enrichment?.image_status).toBe('ready');
   expect(state.entries[0].enrichmentComplete).toBe(false);
 });
+
+
+it('manual regeneration bypasses missing-result caches and updates the local deck', async () => {
+  await store.remember(enriched);
+  await store.sync(false, false);
+  sdk.enrichWord.mockClear();
+  sdk.enrichWord.mockResolvedValueOnce({ ...result, word: { ...enriched, definition: 'Recovered meaning' } });
+  await store.regenerateWord(bare.id);
+  expect(sdk.enrichWord).toHaveBeenCalledWith(bare.id, 'user', true);
+  expect(state.entries[0].word.definition).toBe('Recovered meaning');
+});

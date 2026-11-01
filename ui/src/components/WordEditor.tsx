@@ -15,12 +15,13 @@ import { WordSources } from './WordSources';
 interface Props {
   word: Word;
   updateWord: (id: string, updates: Pick<Word, 'term' | 'definition'>) => Promise<string | null>;
+  regenerateWord: (id: string) => Promise<string | null>;
   removeWord: (id: string) => Promise<string | null>;
   onClose: () => void;
   onSaved: (notice: string) => void;
 }
 
-export function WordEditor({ word, updateWord, removeWord, onClose, onSaved }: Props) {
+export function WordEditor({ word, updateWord, regenerateWord, removeWord, onClose, onSaved }: Props) {
   const theme = useTheme();
   const [term, setTerm] = useState(word.term);
   const [definition, setDefinition] = useState(word.definition ?? '');
@@ -51,6 +52,23 @@ export function WordEditor({ word, updateWord, removeWord, onClose, onSaved }: P
       onClose();
     } catch (failure) {
       if (active.current) setError(failure instanceof Error ? failure.message : 'Unable to save. Please try again.');
+    } finally {
+      if (active.current) { locked.current = false; setBusy(false); }
+    }
+  };
+
+  const regenerate = async () => {
+    if (locked.current || dirty) return;
+    locked.current = true;
+    setBusy(true);
+    setError(null);
+    try {
+      const warning = await regenerateWord(word.id);
+      if (!active.current) return;
+      onSaved(warning || `Missing content for “${word.term}” regenerated.`);
+      onClose();
+    } catch (failure) {
+      if (active.current) setError(failure instanceof Error ? failure.message : 'Unable to regenerate. Please try again.');
     } finally {
       if (active.current) { locked.current = false; setBusy(false); }
     }
@@ -89,6 +107,8 @@ export function WordEditor({ word, updateWord, removeWord, onClose, onSaved }: P
             <Button label="Keep word" variant="outline" disabled={busy} onPress={() => { setConfirmDelete(false); setError(null); }} />
           </View> : <>
             <Button label="Save changes" loading={busy} disabled={!dirty} onPress={() => { void save(false); }} />
+            <Button label="Regenerate missing content" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate(); }} />
+            <Text style={[typography.caption, { color: theme.colors.muted }]}>Retry missing meanings, photos, and audio. Existing content is kept. Save edits before retrying.</Text>
             <Button label="Remove word" variant="outline" disabled={busy} onPress={() => { setConfirmDelete(true); setError(null); }} />
           </>}
         </ScrollView>

@@ -489,3 +489,28 @@ retried when Library refreshes. Test with `node --test ui/server/*.test.cjs`.
 Entered words capitalize each initial (including hyphenated words) while
 preserving acronyms and apostrophes. The API applies this to typed and imported
 words; a capitalization-only edit preserves existing media and review progress.
+
+
+### Daily generation recovery
+
+The API starts a recovery sweep on boot and every 24 hours. It scans words in
+100-row pages and retries missing definitions, illustrations, and pronunciation,
+including previous “not found” results. Successful content and user-written
+meanings are preserved. Each saved attempt records `enrichment.last_attempt_at`
+and `enrichment.pending`; automatic recovery skips attempts from the last 24
+hours, and provider failures do not stop later words from being processed.
+Sweep totals and errors appear in API logs under `[enrichment recovery]`.
+
+In **Library → word details → Regenerate missing content**, users can retry
+immediately, including after a previous no-match result. Save unsaved edits first.
+The authenticated `POST /enrich` accepts `retry_missing: true`; normal requests
+retain their existing caching behavior. Retries do not reset review progress.
+
+No new database migration or secret is required. The timer runs in the existing
+long-running API process, including while users have the app closed. A stopped
+or sleeping host catches up on its next process startup; an uninterrupted daily
+schedule requires an always-running API instance. Overlap is coalesced within
+one process, not across multiple API replicas.
+
+Validation: `npm --prefix api run test:enrich`, `npm --prefix api run build`,
+`npm --prefix ui run test:library`, and `npm --prefix ui run typecheck`.
