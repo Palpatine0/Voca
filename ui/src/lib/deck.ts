@@ -1,3 +1,4 @@
+import type { RegenerationTarget } from './api';
 import { capitalizeWords } from './words';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { api, ApiError, Word } from './api';
@@ -168,11 +169,11 @@ export class DeckStore {
     }
   }
 
-  async regenerateWord(id: string): Promise<string | null> {
+  async regenerateWord(id: string, target?: RegenerationTarget): Promise<string | null> {
     await this.load();
     this.beginMutation(id);
     try {
-      const result = await api.enrichWord(id, this.userId, true);
+      const result = await api.enrichWord(id, this.userId, true, target);
       const { word } = result;
       if (!this.active || word.user_id !== this.userId || word.id !== id) throw new Error('Account changed. Please try again.');
       const warning = await this.saveMutation((entries) => entries.map((entry) => entry.word.id !== id ? entry : {

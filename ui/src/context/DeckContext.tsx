@@ -1,3 +1,4 @@
+import type { RegenerationTarget } from '../lib/api';
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { Word } from '../lib/api';
@@ -8,7 +9,7 @@ interface DeckContextValue extends DeckState {
   remember: (word: Word) => Promise<void>;
   refresh: (force?: boolean) => Promise<void>;
   updateWord: (id: string, updates: Pick<Word, 'term' | 'definition'>) => Promise<string | null>;
-  regenerateWord: (id: string) => Promise<string | null>;
+  regenerateWord: (id: string, target?: RegenerationTarget) => Promise<string | null>;
   removeWord: (id: string) => Promise<string | null>;
 }
 const DeckContext = createContext<DeckContextValue | null>(null);
@@ -47,9 +48,9 @@ export function DeckProvider({ children }: { children: React.ReactNode }) {
     if (!current.current) throw new Error('Deck is not ready');
     return current.current.updateWord(id, updates);
   }, []);
-  const regenerateWord = useCallback(async (id: string) => {
+  const regenerateWord = useCallback(async (id: string, target?: RegenerationTarget) => {
     if (!current.current) throw new Error('Deck is not ready');
-    return current.current.regenerateWord(id);
+    return current.current.regenerateWord(id, target);
   }, []);
   const removeWord = useCallback(async (id: string) => {
     if (!current.current) throw new Error('Deck is not ready');

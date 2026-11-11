@@ -125,7 +125,7 @@ it('retries missing content from details, blocks duplicates and shows failures',
   const retry = button('Regenerate missing content').props.onPress;
   await act(async () => { retry(); retry(); });
   expect(deck.regenerateWord).toHaveBeenCalledTimes(2);
-  expect(deck.regenerateWord).toHaveBeenLastCalledWith('0');
+  expect(deck.regenerateWord).toHaveBeenLastCalledWith('0', undefined);
   expect(root.root.findAllByType(WordEditor)).toHaveLength(0);
 });
 
@@ -135,4 +135,10 @@ it('requires saving local edits before regeneration', async () => {
   expect(button('Regenerate missing content').props.disabled).toBe(true);
   await press('Regenerate missing content');
   expect(deck.regenerateWord).not.toHaveBeenCalled();
+});
+
+it.each([['Regenerate audio', 'audio'], ['Regenerate image', 'image'], ['Regenerate explanation', 'definition']])('requests the selected replacement through %s', async (label, target) => {
+  await mount(); await press('Edit Serene');
+  await press(label);
+  expect(deck.regenerateWord).toHaveBeenCalledWith('0', target);
 });

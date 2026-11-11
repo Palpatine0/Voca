@@ -77,8 +77,8 @@ async function fixture(t: TestContext) {
     server.closeAllConnections();
   }));
   const endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}/enrich`;
-  const post = async (user = 'user', retryMissing = false) => {
-    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: user }, body: JSON.stringify({ word_id: 'word', retry_missing: retryMissing }) });
+  const post = async (user = 'user', retryMissing = false, regenerate?: string) => {
+    const response = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: user }, body: JSON.stringify({ word_id: 'word', retry_missing: retryMissing, regenerate }) });
     return { status: response.status, body: await response.json() as any };
   };
   return {
@@ -341,4 +341,49 @@ test('explicit retry remains account scoped', async (t) => {
   const f = await fixture(t);
   assert.equal((await f.post('someone-else', true)).status, 404);
   assert.equal(f.definition.mock.callCount(), 0);
+});
+
+for (const target of ['audio', 'image', 'definition']) {
+  test(`explicit ${target} regeneration bypasses completed content only for that field`, async (t) => {
+    const f = await fixture(t);
+    await f.post();
+    const previous = { ...f.currentWord() };
+    const result = await f.post('user', true, target);
+    assert.equal(result.status, 200);
+    assert.equal(f.speech.mock.callCount(), target === 'audio' ? 2 : 1);
+    assert.equal(f.illustration.mock.callCount(), target === 'image' ? 2 : 1);
+    assert.equal(f.definition.mock.callCount(), target === 'definition' ? 2 : 1);
+    if (target === 'audio') {
+      assert.notEqual(result.body.word.pronunciation_url, previous.pronunciation_url);
+      await f.post();
+      assert.equal(f.speech.mock.callCount(), 2);
+      assert.equal(f.currentWord().pronunciation_url, result.body.word.pronunciation_url);
+    }
+  });
+}
+test('failed replacement preserves existing content and validates targets and ownership', async (t) => {
+  const f = await fixture(t);
+  await f.post();
+  const before = { ...f.currentWord() };
+  f.setFailures({ speech: true });
+  const failed = await f.post('user', true, 'audio');
+  assert.equal(failed.body.enrichment_pending, true);
+  assert.equal(failed.body.word.pronunciation_url, before.pronunciation_url);
+  f.illustration.mock.mockImplementation(async () => null);
+  assert.equal((await f.post('user', true, 'image')).body.word.image_url, before.image_url);
+  assert.equal((await f.post('other', true, 'all')).status, 404);
+  assert.equal((await f.post('user', true, 'invalid')).status, 400);
+});
+
+test('recovery retries a failed forced replacement even when old content still exists', async (t) => {
+  const f = await fixture(t);
+  await f.post();
+  const previous = f.currentWord().pronunciation_url;
+  f.setFailures({ speech: true });
+  await f.post('user', true, 'audio');
+  assert.ok(f.currentWord().enrichment?.retry_targets.includes('audio'));
+  f.setFailures({});
+  const recovered = await f.post('user', true);
+  assert.notEqual(recovered.body.word.pronunciation_url, previous);
+  assert.deepEqual(recovered.body.word.enrichment.retry_targets, []);
 });

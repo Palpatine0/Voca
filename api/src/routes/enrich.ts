@@ -1,9 +1,13 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { getPronunciationFilename, getSpeechConfig, synthesizeSpeech } from '../lib/elevenlabs';
 import { supabaseAdmin, STORAGE_BUCKET } from '../lib/supabaseAdmin';
 import { findIllustrationUrl } from '../lib/unsplash';
 import { findDefinition } from '../lib/definition';
 import { requireSession } from '../middleware/requireSession';
+import { publicStorageUrl } from '../lib/storageUrl';
+
+export type RegenerationTarget = 'audio' | 'image' | 'definition' | 'all';
 
 export function createEnrichmentService({
   database = supabaseAdmin,
@@ -12,25 +16,29 @@ export function createEnrichmentService({
   definition = findDefinition,
 } = {}) {
   // Coalesce overlapping retries within this server process.
-  const running = new Map<string, { task: Promise<{ status: number; body: object }>; retryMissing: boolean }>();
+  const running = new Map<string, { task: Promise<{ status: number; body: object }>; mode: string }>();
 
-  async function enrich(userId: string, wordId: string, retryMissing: boolean) {
+  async function enrich(userId: string, wordId: string, retryMissing: boolean, target?: RegenerationTarget) {
     const { data: word, error } = await database.from('words').select('*')
       .eq('id', wordId).eq('user_id', userId).maybeSingle();
     if (error) return { status: 500, body: { error: 'Unable to load word' } };
     if (!word) return { status: 404, body: { error: 'word not found' } };
 
+    const metadata = { ...word.enrichment, version: 1 };
+    const retryTargets: string[] = Array.isArray(metadata.retry_targets) ? metadata.retry_targets : [];
+    const force = (part: RegenerationTarget) => target === 'all' || target === part ||
+      (!target && retryMissing && retryTargets.includes(part));
     const bucket = database.storage.from(STORAGE_BUCKET);
     // Voice/model changes need a new immutable URL, including on devices that
     // have already cached the old pronunciation for this spelling.
     const speechConfig = getSpeechConfig();
-    const filename = getPronunciationFilename(word.term, speechConfig);
+    const filename = force('audio') ? `${randomUUID()}.mp3` : getPronunciationFilename(word.term, speechConfig);
     const directory = `${userId}/${word.id}`;
     const audioPath = `${directory}/${filename}`;
-    const audioUrl = bucket.getPublicUrl(audioPath).data.publicUrl;
-    const metadata = { ...word.enrichment, version: 1 };
+    const audioUrl = publicStorageUrl(bucket.getPublicUrl(audioPath).data.publicUrl);
     const pronunciation = async () => {
-      if (word.pronunciation_url === audioUrl && metadata.audio_cache_key === speechConfig.cacheKey) {
+      if (target && !force('audio')) return word.pronunciation_url;
+      if (!force('audio') && word.pronunciation_url && metadata.audio_cache_key === speechConfig.cacheKey) {
         metadata.audio_version = 2;
         return word.pronunciation_url as string;
       }
@@ -56,28 +64,32 @@ export function createEnrichmentService({
     };
 
     const meaning = async () => {
-      if (word.definition?.trim()) {
+      if (target && !force('definition')) return word.definition;
+      if (!force('definition') && word.definition?.trim()) {
         metadata.definition_status = 'ready';
         return word.definition as string;
       }
-      if (!retryMissing && metadata.definition_status === 'not_found') return null;
+      if (!force('definition') && !retryMissing && metadata.definition_status === 'not_found') return null;
       const result = await definition(word.term);
+      if (!result && force('definition')) throw new Error('No replacement explanation found');
       metadata.definition_status = result ? 'ready' : 'not_found';
       metadata.definition_source = result?.source ?? null;
       return result?.text ?? null;
     };
     const meaningTask = meaning();
     const picture = async () => {
+      if (target && !force('image')) return word.image_url;
       // Recheck legacy Unsplash results once, preserving user-provided images.
       const customImage = word.image_url && !/^https:\/\/images\.unsplash\.com\//.test(word.image_url);
-      if (customImage || (word.image_url && metadata.image_status === 'ready')) {
+      if (!force('image') && (customImage || (word.image_url && metadata.image_status === 'ready'))) {
         metadata.image_status = 'ready';
         return word.image_url as string;
       }
-      if (!retryMissing && metadata.image_status === 'not_found' && metadata.image_search_version === 2) return null;
+      if (!force('image') && !retryMissing && metadata.image_status === 'not_found' && metadata.image_search_version === 2) return null;
       // A failed dictionary lookup should not lock in a poor rare-word search.
       const text = await meaningTask;
-      const result = await illustration(word.term, text);
+      const result = await illustration(word.term, text, force('image') ? word.image_url : undefined);
+      if (!result && force('image')) throw new Error('No replacement image found');
       metadata.image_status = result ? 'ready' : 'not_found';
       metadata.image_search_version = 2;
       metadata.image_source = result?.source ?? null;
@@ -85,7 +97,14 @@ export function createEnrichmentService({
     };
     const [audio, image, text] = await Promise.allSettled([pronunciation(), picture(), meaningTask]);
     metadata.last_attempt_at = new Date().toISOString();
-    metadata.pending = audio.status === 'rejected' || image.status === 'rejected' || text.status === 'rejected';
+    const pendingTargets = new Set(retryTargets);
+    for (const [part, result] of [['audio', audio], ['image', image], ['definition', text]] as const) {
+      if (target && !force(part)) continue;
+      if (result.status === 'rejected') pendingTargets.add(part);
+      else pendingTargets.delete(part);
+    }
+    metadata.retry_targets = [...pendingTargets];
+    metadata.pending = pendingTargets.size > 0;
     if (text.status === 'rejected') metadata.definition_status = 'pending';
     if (image.status === 'rejected') metadata.image_status = 'pending';
     if (audio.status === 'rejected') console.warn('[enrich] Pronunciation failed; retry pending');
@@ -111,31 +130,24 @@ export function createEnrichmentService({
       definition_available: Boolean(updatedWord.definition),
       image_available: Boolean(updatedWord.image_url),
       pronunciation_available: Boolean(updatedWord.pronunciation_url),
-      enrichment_pending: audio.status === 'rejected' || image.status === 'rejected' || text.status === 'rejected',
+      enrichment_pending: metadata.pending,
     } };
   }
 
-  return async (userId: string, wordId: string, retryMissing = false) => {
+  return async (userId: string, wordId: string, retryMissing = false, target?: RegenerationTarget) => {
     const key = `${userId}/${wordId}`;
-    const existing = running.get(key);
-    if (existing) {
-      if (!retryMissing || existing.retryMissing) return existing.task;
-      await existing.task;
-      // An explicit retry must not be swallowed by an ordinary background lookup.
-      return run(userId, wordId, retryMissing);
+    const mode = target ?? (retryMissing ? 'missing' : 'normal');
+    while (running.has(key)) {
+      const existing = running.get(key)!;
+      if (existing.mode === mode) return existing.task;
+      await existing.task.catch(() => undefined);
     }
-    return run(userId, wordId, retryMissing);
-  };
-
-  async function run(userId: string, wordId: string, retryMissing: boolean) {
-    const key = `${userId}/${wordId}`;
-    const existing = running.get(key);
-    if (existing) return existing.task;
-    const task = enrich(userId, wordId, retryMissing);
-    running.set(key, { task, retryMissing });
+    const task = enrich(userId, wordId, retryMissing, target);
+    running.set(key, { task, mode });
     try { return await task; }
     finally { if (running.get(key)?.task === task) running.delete(key); }
-  }
+  };
+
 }
 
 export const enrichWord = createEnrichmentService();
@@ -144,11 +156,14 @@ export function createEnrichmentRouter({ authenticate = requireSession, ...provi
   const router = Router();
   router.use(authenticate);
   router.post('/', async (req, res, next) => {
-    const { word_id, retry_missing = false } = req.body ?? {};
+    const { word_id, retry_missing = false, regenerate } = req.body ?? {};
     if (!word_id || typeof word_id !== 'string') return res.status(400).json({ error: 'word_id is required' });
     if (typeof retry_missing !== 'boolean') return res.status(400).json({ error: 'retry_missing must be a boolean' });
+    if (regenerate !== undefined && !['audio', 'image', 'definition', 'all'].includes(regenerate)) {
+      return res.status(400).json({ error: 'Invalid regeneration target' });
+    }
     try {
-      const result = await service(req.userId!, word_id, retry_missing);
+      const result = await service(req.userId!, word_id, retry_missing, regenerate);
       res.status(result.status).json(result.body);
     } catch (error) { next(error); }
   });

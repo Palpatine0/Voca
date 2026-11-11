@@ -1,3 +1,4 @@
+import type { RegenerationTarget } from '../lib/api';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React, { useEffect, useRef, useState } from 'react';
@@ -15,7 +16,7 @@ import { WordSources } from './WordSources';
 interface Props {
   word: Word;
   updateWord: (id: string, updates: Pick<Word, 'term' | 'definition'>) => Promise<string | null>;
-  regenerateWord: (id: string) => Promise<string | null>;
+  regenerateWord: (id: string, target?: RegenerationTarget) => Promise<string | null>;
   removeWord: (id: string) => Promise<string | null>;
   onClose: () => void;
   onSaved: (notice: string) => void;
@@ -57,15 +58,15 @@ export function WordEditor({ word, updateWord, regenerateWord, removeWord, onClo
     }
   };
 
-  const regenerate = async () => {
+  const regenerate = async (target?: RegenerationTarget) => {
     if (locked.current || dirty) return;
     locked.current = true;
     setBusy(true);
     setError(null);
     try {
-      const warning = await regenerateWord(word.id);
+      const warning = await regenerateWord(word.id, target);
       if (!active.current) return;
-      onSaved(warning || `Missing content for “${word.term}” regenerated.`);
+      onSaved(warning || `Content for “${word.term}” regenerated.`);
       onClose();
     } catch (failure) {
       if (active.current) setError(failure instanceof Error ? failure.message : 'Unable to regenerate. Please try again.');
@@ -107,6 +108,10 @@ export function WordEditor({ word, updateWord, regenerateWord, removeWord, onClo
             <Button label="Keep word" variant="outline" disabled={busy} onPress={() => { setConfirmDelete(false); setError(null); }} />
           </View> : <>
             <Button label="Save changes" loading={busy} disabled={!dirty} onPress={() => { void save(false); }} />
+            <Button label="Regenerate audio" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate('audio'); }} />
+            <Button label="Regenerate image" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate('image'); }} />
+            <Button label="Regenerate explanation" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate('definition'); }} />
+            <Text style={[typography.caption, { color: theme.colors.muted }]}>Regeneration replaces the selected content, including a saved explanation. If it fails, your current content is kept.</Text>
             <Button label="Regenerate missing content" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate(); }} />
             <Text style={[typography.caption, { color: theme.colors.muted }]}>Retry missing meanings, photos, and audio. Existing content is kept. Save edits before retrying.</Text>
             <Button label="Remove word" variant="outline" disabled={busy} onPress={() => { setConfirmDelete(true); setError(null); }} />

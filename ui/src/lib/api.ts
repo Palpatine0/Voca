@@ -1,3 +1,4 @@
+export type RegenerationTarget = 'audio' | 'image' | 'definition' | 'all';
 import { API_URL } from './config';
 import { supabase } from './supabase';
 
@@ -120,7 +121,7 @@ export const api = {
       body: JSON.stringify({ term, definition, client_id: clientId }),
     }, userId),
 
-  enrichWord: (wordId: string, userId?: string, retryMissing = false) =>
+  enrichWord: (wordId: string, userId?: string, retryMissing = false, regenerate?: RegenerationTarget) =>
     request<{
       word: Word;
       image_available: boolean;
@@ -128,7 +129,7 @@ export const api = {
       enrichment_pending: boolean;
     }>('/enrich', {
       method: 'POST',
-      body: JSON.stringify({ word_id: wordId, retry_missing: retryMissing }),
+      body: JSON.stringify({ word_id: wordId, retry_missing: retryMissing, regenerate }),
     }, userId),
 
   updateWord: (id: string, updates: Partial<Pick<Word, 'term' | 'definition'>>, userId?: string) =>

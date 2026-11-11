@@ -76,7 +76,7 @@ function creditedUrl(value: string) {
   return url.toString();
 }
 
-export async function findIllustrationUrl(term: string, definition?: string | null): Promise<Illustration | null> {
+export async function findIllustrationUrl(term: string, definition?: string | null, excludeUrl?: string | null): Promise<Illustration | null> {
   const accessKey = process.env.UNSPLASH_ACCESS_KEY;
   if (!accessKey) throw new Error('Illustration service is not configured');
   const headers = { Authorization: `Client-ID ${accessKey}` };
@@ -85,7 +85,7 @@ export async function findIllustrationUrl(term: string, definition?: string | nu
     const response = await fetch(`${UNSPLASH_API_URL}?${params}`, { signal: AbortSignal.timeout(10_000), headers });
     if (!response.ok) throw new Error(`Unsplash request failed (${response.status})`);
     const payload = await response.json() as { results?: Photo[] };
-    const photo = selectRelevantPhoto(payload.results ?? [], query);
+    const photo = selectRelevantPhoto((payload.results ?? []).filter(photo => photo.urls?.regular !== excludeUrl), query);
     if (!photo) continue;
     // Register selection, while displaying the original hotlinked image URL.
     const tracking = new URL(photo.links!.download_location!);

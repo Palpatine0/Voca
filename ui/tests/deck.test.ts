@@ -371,6 +371,6 @@ it('manual regeneration bypasses missing-result caches and updates the local dec
   sdk.enrichWord.mockClear();
   sdk.enrichWord.mockResolvedValueOnce({ ...result, word: { ...enriched, definition: 'Recovered meaning' } });
   await store.regenerateWord(bare.id);
-  expect(sdk.enrichWord).toHaveBeenCalledWith(bare.id, 'user', true);
+  expect(sdk.enrichWord).toHaveBeenCalledWith(bare.id, 'user', true, undefined);
   expect(state.entries[0].word.definition).toBe('Recovered meaning');
 });
