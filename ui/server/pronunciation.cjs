@@ -20,18 +20,17 @@ function createPronunciationHandler({ fetcher = fetch, env = process.env } = {})
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
       return res.status(401).json({ error: 'unauthorized' });
     }
-    const { text, voiceId = env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID,
-      modelId = env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2' } = req.body || {};
-    if (typeof text !== 'string' || !text.trim() || text.length > 200 ||
-        typeof voiceId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(voiceId) ||
-        typeof modelId !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(modelId)) {
+    const { text } = req.body || {};
+    const voiceId = DEFAULT_VOICE_ID;
+    const modelId = 'eleven_turbo_v2_5';
+    if (typeof text !== 'string' || !text.trim() || text.length > 200) {
       return res.status(400).json({ error: 'invalid_pronunciation_request' });
     }
     try {
       const response = await fetcher(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
         method: 'POST', signal: AbortSignal.timeout(25_000),
         headers: { 'Content-Type': 'application/json', Accept: 'audio/mpeg', 'xi-api-key': env.ELEVENLABS_API_KEY },
-        body: JSON.stringify({ text, model_id: modelId }),
+        body: JSON.stringify({ text, model_id: modelId, language_code: 'en' }),
       });
       if (!response.ok) {
         // Do not return provider payloads, keys, or infrastructure error pages.

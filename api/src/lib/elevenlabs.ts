@@ -11,12 +11,13 @@ export interface SpeechOptions {
 }
 
 export function getSpeechConfig(options: SpeechOptions = {}) {
-  const voiceId = options.voiceId || process.env.ELEVENLABS_VOICE_ID || DEFAULT_VOICE_ID;
-  const modelId = options.modelId || process.env.ELEVENLABS_MODEL_ID || 'eleven_multilingual_v2';
+  // Pin the US voice and language-capable model; legacy env overrides must not change the accent.
+  const voiceId = DEFAULT_VOICE_ID;
+  const modelId = 'eleven_turbo_v2_5';
   // Audio has immutable storage/CDN URLs. A new voice, model, or output format
   // must get a new path instead of silently reusing an older pronunciation.
   const cacheKey = createHash('sha256')
-    .update(JSON.stringify(['pronunciation-v2', voiceId, modelId, OUTPUT_FORMAT]))
+    .update(JSON.stringify(['pronunciation-v3-en-US', voiceId, modelId, 'en', OUTPUT_FORMAT]))
     .digest('hex');
   return { voiceId, modelId, cacheKey };
 }
@@ -43,7 +44,7 @@ export async function synthesizeSpeech(text: string, options: SpeechOptions = {}
         'Content-Type': 'application/json', Accept: 'audio/mpeg',
         ...(relayUrl ? { Authorization: `Bearer ${relaySecret}` } : { 'xi-api-key': apiKey! }),
       },
-      body: JSON.stringify(relayUrl ? { text, voiceId, modelId } : { text, model_id: modelId }),
+      body: JSON.stringify(relayUrl ? { text, voiceId, modelId } : { text, model_id: modelId, language_code: 'en' }),
     }
   );
   if (!response.ok) throw new Error(`Pronunciation request failed (${response.status})`);

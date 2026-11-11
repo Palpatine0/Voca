@@ -11,25 +11,25 @@ function preserveEnv(t: any, names: string[]) {
   }));
 }
 
-test('audio paths change with the term, voice, or model and never reuse a legacy MP3', (t) => {
+test('audio profile pins US English despite environment and caller overrides', (t) => {
   preserveEnv(t, ['ELEVENLABS_VOICE_ID', 'ELEVENLABS_MODEL_ID']);
   delete process.env.ELEVENLABS_VOICE_ID;
   delete process.env.ELEVENLABS_MODEL_ID;
   const config = getSpeechConfig();
   assert.equal(config.voiceId, 'EXAVITQu4vr4xnSDxMaL');
-  assert.equal(config.modelId, 'eleven_multilingual_v2');
+  assert.equal(config.modelId, 'eleven_turbo_v2_5');
   const filename = getPronunciationFilename('Deep Blue', config);
   assert.equal(filename, getPronunciationFilename('Deep Blue', config));
   assert.match(filename, /^[a-f0-9]{64}\.mp3$/);
   assert.notEqual(filename, `${createHash('sha256').update('Deep Blue').digest('hex')}.mp3`);
   assert.notEqual(filename, getPronunciationFilename('Other Word', config));
-  assert.notEqual(filename, getPronunciationFilename('Deep Blue', { ...config, voiceId: 'different-voice' }));
-  assert.notEqual(filename, getPronunciationFilename('Deep Blue', { ...config, modelId: 'different-model' }));
+  assert.equal(filename, getPronunciationFilename('Deep Blue', { ...config, voiceId: 'different-voice' }));
+  assert.equal(filename, getPronunciationFilename('Deep Blue', { ...config, modelId: 'different-model' }));
   process.env.ELEVENLABS_VOICE_ID = 'configured-voice';
   process.env.ELEVENLABS_MODEL_ID = 'configured-model';
-  assert.equal(getSpeechConfig().voiceId, 'configured-voice');
-  assert.equal(getSpeechConfig().modelId, 'configured-model');
-  assert.notEqual(getSpeechConfig().cacheKey, config.cacheKey);
+  assert.equal(getSpeechConfig().voiceId, config.voiceId);
+  assert.equal(getSpeechConfig().modelId, config.modelId);
+  assert.equal(getSpeechConfig().cacheKey, config.cacheKey);
   assert.equal(getSpeechConfig(config).cacheKey, config.cacheKey);
 });
 
@@ -47,7 +47,7 @@ test('production audio uses the private relay and validates the response before 
     assert.equal(init.headers.Authorization, 'Bearer private-relay-key');
     assert.equal(init.headers['xi-api-key'], undefined);
     assert.deepEqual(JSON.parse(init.body), {
-      text: 'Deep Blue', voiceId: 'EXAVITQu4vr4xnSDxMaL', modelId: 'eleven_multilingual_v2',
+      text: 'Deep Blue', voiceId: 'EXAVITQu4vr4xnSDxMaL', modelId: 'eleven_turbo_v2_5',
     });
     return new Response(audio, { headers: { 'Content-Type': 'audio/mpeg' } });
   });
@@ -66,10 +66,10 @@ test('direct synthesis uses the same explicitly resolved voice and model as its 
   process.env.ELEVENLABS_API_KEY = 'private-provider-key';
   const config = getSpeechConfig({ voiceId: 'chosen-voice', modelId: 'chosen-model' });
   t.mock.method(globalThis, 'fetch', async (url: any, init: any) => {
-    assert.equal(url, 'https://api.elevenlabs.io/v1/text-to-speech/chosen-voice?output_format=mp3_44100_128');
+    assert.equal(url, 'https://api.elevenlabs.io/v1/text-to-speech/EXAVITQu4vr4xnSDxMaL?output_format=mp3_44100_128');
     assert.equal(init.headers['xi-api-key'], 'private-provider-key');
     assert.equal(init.headers.Authorization, undefined);
-    assert.deepEqual(JSON.parse(init.body), { text: 'Deep Blue', model_id: config.modelId });
+    assert.deepEqual(JSON.parse(init.body), { text: 'Deep Blue', model_id: config.modelId, language_code: 'en' });
     return new Response(audio, { headers: { 'Content-Type': 'audio/mpeg' } });
   });
   assert.deepEqual(await synthesizeSpeech('Deep Blue', config), audio);
