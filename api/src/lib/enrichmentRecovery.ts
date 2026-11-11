@@ -1,3 +1,4 @@
+import { logError } from './errorLog';
 import { supabaseAdmin } from './supabaseAdmin';
 import { getSpeechConfig } from './elevenlabs';
 import { enrichWord } from '../routes/enrich';
@@ -42,8 +43,14 @@ export async function recoverEnrichment(database = supabaseAdmin, enrich = enric
       summary.attempted++;
       try {
         const result = await enrich(word.user_id, word.id, true);
-        if (result.status !== 200 || ('enrichment_pending' in result.body && result.body.enrichment_pending)) summary.failed++;
-      } catch { summary.failed++; }
+        if (result.status !== 200 || ('enrichment_pending' in result.body && result.body.enrichment_pending)) {
+          summary.failed++;
+          if (result.status !== 200) void logError({ event: 'recovery_failure', operation: 'recovery', userId: word.user_id, wordId: word.id, status: result.status });
+        }
+      } catch (error) {
+        summary.failed++;
+        void logError({ event: 'recovery_failure', operation: 'recovery', userId: word.user_id, wordId: word.id }, error);
+      }
     }
     cursor = data[data.length - 1].id;
   }
@@ -56,7 +63,10 @@ export function startEnrichmentRecovery(recover = recoverEnrichment, interval = 
     if (running) return;
     running = true;
     try { console.info('[enrichment recovery]', await recover()); }
-    catch (error) { console.error('[enrichment recovery] Sweep failed', error); }
+    catch (error) {
+      void logError({ event: 'recovery_failure', operation: 'recovery' }, error);
+      console.error('[enrichment recovery] Sweep failed');
+    }
     finally { running = false; }
   };
   // Catch up after restarts; persisted attempt times prevent repeated provider calls.

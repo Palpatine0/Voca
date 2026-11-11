@@ -46,6 +46,18 @@ test('fresh Supabase setup and safe reapplication', { timeout: 15000 }, async (t
   }
 
   await migrate();
+  await t.test('error logs are service-only and migrations are idempotent', async () => {
+    await migrate();
+    await db.exec("insert into public.error_logs(event, operation) values ('api_failure', 'words')");
+    await assert.rejects(asUser(userA, tx => tx.query('select * from public.error_logs')), /permission denied/);
+    await assert.rejects(asUser(userA, tx => tx.query("insert into public.error_logs(event, operation) values ('api_failure', 'words')")), /permission denied/);
+    await db.transaction(async tx => {
+      await tx.exec('set local role service_role');
+      await tx.exec("insert into public.error_logs(event, operation) values ('generation_failure', 'audio')");
+      assert.equal((await tx.query('select * from public.error_logs')).rows.length, 2);
+    });
+  });
+
   const { rows: [wordA] } = await asUser(userA, (tx) => tx.query(
     'insert into public.words (user_id, term) values ($1, $2) returning *',
     [userA, 'ephemeral']

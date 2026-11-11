@@ -1,3 +1,4 @@
+import { logError } from '../lib/errorLog';
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { getPronunciationFilename, getSpeechConfig, synthesizeSpeech } from '../lib/elevenlabs';
@@ -107,7 +108,9 @@ export function createEnrichmentService({
     metadata.pending = pendingTargets.size > 0;
     if (text.status === 'rejected') metadata.definition_status = 'pending';
     if (image.status === 'rejected') metadata.image_status = 'pending';
-    if (audio.status === 'rejected') console.warn('[enrich] Pronunciation failed; retry pending');
+    for (const [operation, result] of [['audio', audio], ['image', image], ['definition', text]] as const) {
+      if (result.status === 'rejected') void logError({ event: 'generation_failure', operation, userId, wordId }, result.reason);
+    }
     const updates: Record<string, unknown> = { enrichment: metadata };
     if (audio.status === 'fulfilled' && audio.value !== word.pronunciation_url) updates.pronunciation_url = audio.value;
     if (image.status === 'fulfilled' && image.value !== word.image_url) updates.image_url = image.value;
