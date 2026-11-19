@@ -6,6 +6,7 @@ import { startEnrichmentRecovery } from './lib/enrichmentRecovery';
 import express from 'express';
 import enrichRouter from './routes/enrich';
 import ocrRouter from './routes/ocr';
+import remindersRouter, { startReviewReminders } from './routes/reminders';
 import reviewRouter from './routes/review';
 import wordsRouter from './routes/words';
 
@@ -35,6 +36,7 @@ app.use(express.json({ limit: '1mb' }));
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 app.use('/words', wordsRouter);
+app.use('/reminders', remindersRouter);
 app.use('/review', reviewRouter);
 app.use('/enrich', enrichRouter);
 
@@ -54,5 +56,6 @@ app.use(
 
 app.listen(PORT, HOST, () => {
   startEnrichmentRecovery();
+  startReviewReminders();
   console.log(`Voca server listening on http://${HOST}:${PORT}`);
 });

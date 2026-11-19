@@ -2,7 +2,7 @@
 export type ErrorEvent = 'api_failure' | 'generation_failure' | 'recovery_failure';
 export interface ErrorContext {
   event: ErrorEvent;
-  operation?: 'audio' | 'image' | 'definition' | 'words' | 'review' | 'enrich' | 'ocr' | 'recovery' | 'unknown';
+  operation?: 'audio' | 'image' | 'definition' | 'words' | 'review' | 'enrich' | 'ocr' | 'recovery' | 'reminders' | 'unknown';
   userId?: string;
   wordId?: string;
   status?: number;
