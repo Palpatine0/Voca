@@ -1,3 +1,4 @@
+import { ReminderSetting } from '../../src/components/ReminderSetting';
 import { webFormContent } from '../../src/lib/layout';
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -38,6 +39,8 @@ export default function SettingsScreen() {
             {user.email}
           </Text>
         )}
+
+        {user && <ReminderSetting key={user.id} userId={user.id} />}
 
         {error && (
           <Text
