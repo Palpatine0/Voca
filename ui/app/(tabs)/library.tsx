@@ -2,7 +2,7 @@ import { webContent } from '../../src/lib/layout';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Clipboard, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Button } from '../../src/components/Button';
 import { PronunciationButton } from '../../src/components/PronunciationButton';
@@ -33,6 +33,23 @@ export function LibraryContent({ deck, focused }: { deck: ReturnType<typeof useD
   const [now, setNow] = useState(Date.now());
   const selected = deck.entries.find((entry) => entry.word.id === selectedWord?.id)?.word ?? selectedWord;
   const entries = visibleWords(deck.entries, query, filter, sort, now);
+
+  const [copyFeedback, setCopyFeedback] = useState<{ id: string; message: string } | null>(null);
+  async function copyWord(word: Word) {
+    try {
+      if (Platform.OS === 'web') await navigator.clipboard.writeText(word.term);
+      else Clipboard.setString(word.term);
+      setCopyFeedback({ id: word.id, message: 'Copied' });
+    } catch {
+      setCopyFeedback({ id: word.id, message: 'Clipboard unavailable' });
+    }
+  }
+
+  useEffect(() => {
+    if (!copyFeedback) return;
+    const timer = setTimeout(() => setCopyFeedback(null), 2500);
+    return () => clearTimeout(timer);
+  }, [copyFeedback]);
 
   useEffect(() => {
     if (!focused) { setSelectedWord(null); return; }
@@ -94,8 +111,12 @@ export function LibraryContent({ deck, focused }: { deck: ReturnType<typeof useD
             <Text style={[typography.titleMd, { color: theme.colors.ink }]}>{item.word.term}</Text>
             <Text numberOfLines={2} style={[typography.bodySm, styles.description, { color: theme.colors.body }]}>{item.word.definition || (item.word.enrichment?.definition_status === 'not_found' ? 'No dictionary match · tap to add a meaning' : 'Finding a short meaning…')}</Text>
           </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={'Copy ' + item.word.term} onPress={() => void copyWord(item.word)} style={styles.clear}>
+            <Ionicons name="copy-outline" size={20} color={theme.colors.body} />
+          </Pressable>
           {focused && !selectedWord && item.word.pronunciation_url && <PronunciationButton userId={item.word.user_id} wordId={item.word.id} audioUrl={item.word.pronunciation_url} />}
         </View>
+        {copyFeedback?.id === item.word.id && <Text accessibilityLiveRegion="polite" style={[typography.caption, { color: theme.colors.body }]}>{copyFeedback.message}</Text>}
         <Text style={[typography.captionUppercase, styles.description, { color: theme.colors.muted }]}>{reviewLabel(item.word.next_review_at, now)}</Text>
         <Text style={[typography.caption, styles.description, { color: theme.colors.muted }]}>
           {item.audioReady ? 'Pronunciation saved offline' : !supportsOfflineAudio && item.word.pronunciation_url ? 'Online pronunciation' : item.attempts ? 'Audio pending · will retry' : 'Preparing pronunciation…'}
