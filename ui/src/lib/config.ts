@@ -14,6 +14,9 @@ function extraString(key: string): string {
 export const API_URL =
   process.env.EXPO_PUBLIC_API_URL || extraString('apiUrl') || 'http://localhost:4000';
 
+export const SITE_URL =
+  process.env.EXPO_PUBLIC_SITE_URL || extraString('siteUrl') || 'https://voca.sethmccarthy.in';
+
 export const SUPABASE_URL =
   process.env.EXPO_PUBLIC_SUPABASE_URL || extraString('supabaseUrl');
 

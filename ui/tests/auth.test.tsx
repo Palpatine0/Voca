@@ -15,7 +15,9 @@ import Index from '../app/index';
 import { AuthGate } from '../src/components/AuthGate';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { initialAuthCallback, readStoredSession, supabase } from '../src/lib/supabase';
-import { readAuthCallback } from '../src/lib/authLinks';
+import { passwordResetRedirect, readAuthCallback } from '../src/lib/authLinks';
+
+jest.mock('../src/lib/config', () => ({ SITE_URL: 'https://voca0.vercel.app' }));
 
 jest.mock('../src/lib/supabase', () => ({
   initialAuthCallback: { hasCallback: false, recovery: false },
@@ -27,6 +29,11 @@ jest.mock('../src/lib/supabase', () => ({
     startAutoRefresh: jest.fn(), stopAutoRefresh: jest.fn(),
   } },
 }));
+
+it('uses the configured website for native password recovery', () => {
+  jest.replaceProperty(jest.requireMock('../src/lib/config'), 'SITE_URL', 'https://voca.sethmccarthy.in/');
+  expect(passwordResetRedirect()).toBe('https://voca.sethmccarthy.in/reset-password');
+});
 // Exercise the real route layouts/provider while replacing native navigation.
 jest.mock('expo-router', () => {
   const React = require('react');

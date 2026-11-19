@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { SITE_URL } from './config';
 
 export const INVALID_RESET_LINK = 'This reset link is invalid or has expired. Please request a new one.';
 
@@ -18,6 +19,7 @@ export function readAuthCallback(url: string) {
 export function passwordResetRedirect() {
   // Native users can finish recovery in a browser, then sign in to the app.
   const origin = Platform.OS === 'web' && typeof window !== 'undefined'
-    ? window.location.origin : 'https://voca0.vercel.app';
-  return `${origin}/reset-password`;
+    ? window.location.origin
+    : SITE_URL;
+  return `${origin.replace(/\/+$/, '')}/reset-password`;
 }

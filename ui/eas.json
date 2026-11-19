@@ -16,7 +16,10 @@
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://voca-api-carrion-spike-2eaa6bca.koyeb.app"
+        "EXPO_PUBLIC_API_URL": "https://voca.sethmccarthy.in/api",
+        "EXPO_PUBLIC_SITE_URL": "https://voca.sethmccarthy.in",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://voca.sethmccarthy.in/supabase",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyODMwNjQ4LCJleHAiOjIxMDgxOTA2NDh9.YRrhLdDlCC8bo8nhYfHiZfOktw3xx4hk9Ff-zzvD2Bc"
       },
       "android": {
         "buildType": "apk"
@@ -25,7 +28,10 @@
     "production": {
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://voca-api-carrion-spike-2eaa6bca.koyeb.app"
+        "EXPO_PUBLIC_API_URL": "https://voca.sethmccarthy.in/api",
+        "EXPO_PUBLIC_SITE_URL": "https://voca.sethmccarthy.in",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://voca.sethmccarthy.in/supabase",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoiYW5vbiIsImlzcyI6InN1cGFiYXNlIiwiaWF0IjoxNzkyODMwNjQ4LCJleHAiOjIxMDgxOTA2NDh9.YRrhLdDlCC8bo8nhYfHiZfOktw3xx4hk9Ff-zzvD2Bc"
       },
       "android": {
         "buildType": "apk"
