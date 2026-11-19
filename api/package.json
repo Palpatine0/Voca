@@ -12,7 +12,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "test:setup": "node --test-reporter=spec tests/setup.test.mjs",
-    "test:enrich": "tsx --test tests/enrich.test.ts tests/recovery.test.ts tests/definition.test.ts tests/elevenlabs.test.ts",
+    "test:enrich": "tsx --test tests/enrich.test.ts tests/recovery.test.ts tests/definition.test.ts tests/elevenlabs.test.ts tests/storage-url.test.ts",
     "test:ocr": "tsx --test tests/ocr.test.ts tests/import.test.ts",
     "test:library": "tsx --test tests/library.test.ts tests/enrich.test.ts tests/recovery.test.ts tests/definition.test.ts tests/elevenlabs.test.ts"
   },
