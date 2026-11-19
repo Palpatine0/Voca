@@ -67,6 +67,29 @@ test('fresh Supabase setup and safe reapplication', { timeout: 15000 }, async (t
     [userB, 'resilient']
   ));
 
+  await t.test('reminder claims require due words, daytime, and an unsent local day', async () => {
+    await assert.rejects(asUser(userA, tx => tx.query('select * from public.reminder_identity')), /permission denied/);
+    await assert.rejects(asUser(userA, tx => tx.query('select * from public.claim_review_reminders()')), /permission denied/);
+    await db.transaction(async tx => {
+      await tx.exec('set local role service_role');
+      const { rows: [zones] } = await tx.query(`
+        select min(name) filter (where extract(hour from now() at time zone name) = 12) as day,
+               min(name) filter (where extract(hour from now() at time zone name) = 2) as night
+        from pg_timezone_names`);
+      await tx.query("insert into review_subscriptions(endpoint, user_id, keys, timezone) values ('day', $1, '{}', $2), ('night', $1, '{}', $3)", [userA, zones.day, zones.night]);
+      const claim = () => tx.query('select endpoint from public.claim_review_reminders()');
+      assert.deepEqual((await claim()).rows, [{ endpoint: 'day' }]);
+      assert.deepEqual((await claim()).rows, []);
+      await tx.exec("update review_subscriptions set retry_after = now(), last_sent = (now() at time zone timezone)::date");
+      assert.deepEqual((await claim()).rows, []);
+      await tx.exec("update review_subscriptions set last_sent = null");
+      await tx.query("update words set next_review_at = now() + interval '1 day' where user_id = $1", [userA]);
+      assert.deepEqual((await claim()).rows, []);
+      await tx.query("update words set next_review_at = now() where user_id = $1", [userA]);
+      await tx.exec('delete from review_subscriptions');
+    });
+  });
+
   await t.test('new words have a valid, immediately due SM-2 state', async () => {
     assert.ok(wordA.id);
     assert.equal(wordA.easiness_factor, 2.5);
