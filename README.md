@@ -389,72 +389,37 @@ physical iPhone; check the Home Screen icon and standalone launch on the device.
 
 ## Deployment
 
-- **API**: Docker → Koyeb (port 8080)
-- **Web UI**: Vercel, project `sethmccarthys-projects/voca`
-- **Native UI**: EAS Build (iOS/Android; project linking still required)
-- **Database**: Supabase (hosted Postgres)
+Live app: **https://voca.sethmccarthy.in**. The web app, API, PostgreSQL,
+authentication, and audio storage run in Docker on the Mac mini. Cloudflare
+Tunnel provides the public HTTPS connection. Container names use the exact
+`voca_` prefix, within the `voca` Docker group.
 
-### Live web deployment
+See [the Mac mini operating guide](deploy/mac-mini/README.md) for installation,
+updates, backups, DNS, and recovery. As of October 24, 2026, public password
+login, word creation, direct ElevenLabs audio, browser playback, image lookup,
+review persistence, and account isolation passed. The imported account, eight
+words, and fourteen audio files are preserved. A fresh backup restored those
+counts successfully and was copied to the workstation.
 
-- App: https://voca0.vercel.app
-- API health: https://voca-api-carrion-spike-2eaa6bca.koyeb.app/health
-- Koyeb App/Service: `voca-api/voca-api`, free instance in Washington, D.C.
+Email delivery is not configured yet: new signup is disabled, and password-reset
+emails are unavailable. Existing accounts can sign in with their original password.
 
-Vercel's Root Directory is `ui`, with framework preset Other, install command
-`npm ci`, build command `npm run build:web`, and output directory `dist`.
-Keep files outside the root directory excluded from the build so the Koyeb
-backend in `api/` is not treated as Vercel serverless functions. `ui/vercel.json`
-serves Expo's single-page export and rewrites direct routes to the app. The
-production environment has `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_SUPABASE_URL`,
-and `EXPO_PUBLIC_SUPABASE_ANON_KEY` configured. The project is connected to
-`Palpatine0/Voca`; pushes to `main` deploy the frontend automatically. For CLI
-deployments, link the repository root with
-`vercel link --project voca --scope sethmccarthys-projects`, then run
-`vercel deploy --prod --scope sethmccarthys-projects` from that same root.
+### Previous cloud hosting
 
-Koyeb uses the same deployment layout as Thread: GitHub repository
-`Palpatine0/Voca`, branch `main`, work directory `api`, Docker builder, and
-`Dockerfile` relative to that directory. Autodeploy is enabled. Voca keeps
-Node 22 for its dependencies, a free instance in `was`, port 8080, and an HTTP
-health check at `/health`. The server uses the `voca-supabase-service-role`
-Koyeb secret for its Supabase key.
+- `https://voca0.vercel.app` now redirects paths to the new public address. Its
+  small redirect deployment lives in [deploy/vercel-redirect](deploy/vercel-redirect/ui/vercel.json).
+  Vercel's Git connection is disconnected, so pushes cannot replace the redirect.
+- Koyeb `voca-api/voca-api` is paused and deploy-on-push is disabled. The legacy deployment script requires an
+  explicit opt-in to avoid accidentally restoring the old backend.
+- Supabase Cloud remains an unused rollback copy. Dashboard control failed while
+  preparing to pause it; it has not been deleted or paused.
+- These cloud copies are not synchronized with new writes on the mini. A rollback
+  must first reconcile data; simply restoring an old deployment would lose access
+  to new words and reviews.
 
-After pushing changes to `main`, both hosts build from GitHub. To reapply the
-API hosting settings and deploy the latest remote `main` manually, use an
-authenticated Koyeb CLI from the repository root:
-
-```bash
-bash scripts/deploy-api.sh
-```
-
-This updates the existing `voca-api/voca-api` service and preserves its managed
-environment variables and secrets. It does not upload local files. GitHub access
-to `Palpatine0/Voca` must be granted to the Koyeb integration. The tracked
-`ui/vercel.json`, `api/Dockerfile`, `api/.dockerignore`, and deployment script
-contain the reusable hosting setup; the Vercel Root Directory remains a project
-setting. See Koyeb's [GitHub deployment documentation](https://www.koyeb.com/docs/build-and-deploy/deploy-with-git)
-for integration setup and autodeploy behavior.
-
-Supabase's Auth Site URL is the production Vercel URL, so default confirmation
-links return to the live app. Email confirmation remains enabled.
-
-Koyeb's `ELEVENLABS_API_KEY` and `UNSPLASH_ACCESS_KEY` reference the managed
-secrets `voca-elevenlabs-api-key` and `voca-unsplash-access-key`. The Unsplash
-Secret Key is not used. Illustration lookup succeeded from the deployed API
-on October 14, 2026. Pronunciation generation succeeded locally with the
-configured ElevenLabs key, but the same request from Koyeb returned HTTP 403;
-production pronunciation remains blocked pending resolution of that access
-failure. Unsplash photos include photographer credits and selection tracking. Keep credential values out of repository files and rotate shared
-credentials through the provider dashboards and Koyeb secret storage.
-
-The free backend can sleep after inactivity, so its first request may be slower.
-Home saves the last successful word counts separately for each signed-in account
-and shows them immediately on later visits while fetching current counts. Saved
-counts are labeled until refreshed; a saved zero does not disable checking Review.
-A failed refresh keeps those counts visible with a retry button. The count request
-has a 15-second deadline covering session refresh and response loading; other API
-operations retain their 60-second deadline. This improves repeat visits without
-changing the backend's free hosting plan or its wake-up behavior.
+The Vercel project retains Root Directory `ui`. To redeploy only the redirect,
+link `deploy/vercel-redirect` to the existing Vercel project, then deploy from
+that directory. Do not deploy the application to Vercel for routine mini updates.
 
 ### Native builds
 
@@ -462,29 +427,20 @@ Apply the SQL migrations to the target Supabase project before running the API.
 Configure the API's server environment on the host. Before an EAS build, link
 your Expo project and replace the placeholder `extra.eas.projectId` in
 `ui/app.json`; verify the owner, bundle identifiers, and Apple team against your
-account. Set the public Supabase environment values for the build and verify
-the API URL in `ui/eas.json` points to your deployed service. These steps are
-deployment configuration, not performed by a local bundle export.
+account. The preview and production settings in `ui/eas.json` now point to the mini
+and include its public anon key. Existing installed native apps still require a
+new build; no native release was made as part of the web hosting migration.
 
 ### Production pronunciation routing
 
-Koyeb validates the signed-in user and loads their saved word. It calls the
-single Vercel function at `/api/pronunciation` using a server-only
-`VOCA_AUDIO_RELAY_SECRET`, then saves the returned MP3 in Supabase Storage.
-This avoids the HTML 403 response observed when Koyeb calls ElevenLabs directly.
-The browser still talks to Koyeb and plays the saved audio URL.
+The mini's API validates the signed-in user, calls ElevenLabs directly, and
+stores the MP3 in the mini's storage volume. Browser-facing audio URLs use
+`https://voca.sethmccarthy.in/supabase/storage/v1/object/public/`. No Vercel
+pronunciation relay is used by the mini. Provider keys stay in the private
+server environment and must never use the `EXPO_PUBLIC_` prefix.
 
-Set `VOCA_AUDIO_RELAY_URL=https://voca0.vercel.app/api/pronunciation` and
-`VOCA_AUDIO_RELAY_SECRET` on Koyeb. Set the identical relay secret and
-`ELEVENLABS_API_KEY` as sensitive **production** variables in Vercel.
-Generate a random secret of at least 32 characters. Never prefix these keys with
-`EXPO_PUBLIC_`. Deploy Vercel before enabling the relay on Koyeb. Without a relay
-URL, local development calls ElevenLabs directly using `ELEVENLABS_API_KEY`.
-
-The function accepts only authenticated server calls, bounds text to 200
-characters, and rejects invalid or empty MP3 responses before storage. It is
-one function, within the Vercel Hobby function limit. Existing missing audio is
-retried when Library refreshes. Test with `node --test ui/server/*.test.cjs`.
+The old relay implementation remains in `ui/server` only for historical
+compatibility and its existing tests.
 
 Entered words capitalize each initial (including hyphenated words) while
 preserving acronyms and apostrophes. The API applies this to typed and imported
