@@ -35,6 +35,11 @@ export function LibraryContent({ deck, focused }: { deck: ReturnType<typeof useD
   const entries = visibleWords(deck.entries, query, filter, sort, now);
 
   const [copyFeedback, setCopyFeedback] = useState<{ id: string; message: string } | null>(null);
+  function openWord(word: Word) {
+    setSelectedWord(word);
+    setNotice(null);
+  }
+
   async function copyWord(word: Word) {
     try {
       if (Platform.OS === 'web') await navigator.clipboard.writeText(word.term);
@@ -107,13 +112,19 @@ export function LibraryContent({ deck, focused }: { deck: ReturnType<typeof useD
       </View>}
       renderItem={({ item }) => <View style={[styles.card, { backgroundColor: theme.colors.surfaceCard, borderColor: theme.colors.hairline }]}>
         <View style={styles.cardRow}>
-          <Pressable accessibilityRole="button" accessibilityLabel={'Edit ' + item.word.term} onPress={() => { setSelectedWord(item.word); setNotice(null); }} style={styles.wordButton}>
-            <Text style={[typography.titleMd, { color: theme.colors.ink }]}>{item.word.term}</Text>
-            <Text numberOfLines={2} style={[typography.bodySm, styles.description, { color: theme.colors.body }]}>{item.word.definition || (item.word.enrichment?.definition_status === 'not_found' ? 'No dictionary match · tap to add a meaning' : 'Finding a short meaning…')}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={'Copy ' + item.word.term} onPress={() => void copyWord(item.word)} style={styles.clear}>
-            <Ionicons name="copy-outline" size={20} color={theme.colors.body} />
-          </Pressable>
+          <View style={styles.wordColumn}>
+            <View style={styles.termRow}>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Edit ' + item.word.term} onPress={() => openWord(item.word)} style={styles.wordButton}>
+                <Text style={[typography.titleMd, { color: theme.colors.ink }]}>{item.word.term}</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel={'Copy ' + item.word.term} onPress={() => void copyWord(item.word)} style={styles.clear}>
+                <Ionicons name="copy-outline" size={17} color={theme.colors.body} />
+              </Pressable>
+            </View>
+            <Pressable accessibilityRole="button" accessibilityLabel={'Open details for ' + item.word.term} onPress={() => openWord(item.word)}>
+              <Text numberOfLines={2} style={[typography.bodySm, { color: theme.colors.body }]}>{item.word.definition || (item.word.enrichment?.definition_status === 'not_found' ? 'No dictionary match · tap to add a meaning' : 'Finding a short meaning…')}</Text>
+            </Pressable>
+          </View>
           {focused && !selectedWord && item.word.pronunciation_url && <PronunciationButton userId={item.word.user_id} wordId={item.word.id} audioUrl={item.word.pronunciation_url} />}
         </View>
         {copyFeedback?.id === item.word.id && <Text accessibilityLiveRegion="polite" style={[typography.caption, { color: theme.colors.body }]}>{copyFeedback.message}</Text>}
@@ -142,6 +153,8 @@ const styles = StyleSheet.create({
   sort: { minHeight: 44, flexDirection: 'row', gap: spacing.xs, alignItems: 'center' },
   card: { borderWidth: 1, borderRadius: radii.xl, padding: spacing.lg, marginBottom: spacing.sm },
   cardRow: { flexDirection: 'row', gap: spacing.base, alignItems: 'flex-start' },
-  wordButton: { flex: 1, minHeight: 44 },
+  wordColumn: { flex: 1, minWidth: 0 },
+  termRow: { flexDirection: 'row', alignItems: 'center' },
+  wordButton: { flexShrink: 1, minHeight: 44, justifyContent: 'center' },
   empty: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.base },
 });
