@@ -2,13 +2,12 @@ import type { RegenerationTarget } from '../lib/api';
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import React, { useEffect, useRef, useState } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Word } from '../lib/api';
 import { reviewLabel } from '../lib/library';
 import { capitalizeWords } from '../lib/words';
 import { radii, spacing, typography, useTheme } from '../lib/theme';
-import { Button } from './Button';
 import { PronunciationButton } from './PronunciationButton';
 import { TextInput } from './TextInput';
 import { WordSources } from './WordSources';
@@ -20,6 +19,26 @@ interface Props {
   removeWord: (id: string) => Promise<string | null>;
   onClose: () => void;
   onSaved: (notice: string) => void;
+}
+
+function ActionIcon({ label, icon, onPress, disabled, tone = 'neutral' }: {
+  label: string;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  onPress: () => void;
+  disabled?: boolean;
+  tone?: 'neutral' | 'primary' | 'danger';
+}) {
+  const { colors } = useTheme();
+  const backgroundColor = tone === 'primary' ? colors.primary : colors.surfaceCard;
+  const color = tone === 'danger' ? colors.semanticError : tone === 'primary' ? colors.onPrimary : colors.ink;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled }}
+    {...(Platform.OS === 'web' ? { title: label } : {})}
+    disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.action, {
+      backgroundColor, borderColor: tone === 'danger' ? colors.semanticError : tone === 'primary' ? colors.primary : colors.hairlineStrong,
+      opacity: disabled ? 0.4 : pressed ? 0.7 : 1,
+    }]}>
+    <Ionicons name={icon} size={21} color={color} />
+  </Pressable>;
 }
 
 export function WordEditor({ word, updateWord, regenerateWord, removeWord, onClose, onSaved }: Props) {
@@ -81,6 +100,8 @@ export function WordEditor({ word, updateWord, regenerateWord, removeWord, onClo
       <SafeAreaView edges={['bottom']} style={[styles.sheet, { backgroundColor: theme.colors.surfaceCard }]}>
         <View style={styles.header}>
           <Text accessibilityRole="header" style={[typography.displaySm, { color: theme.colors.ink, flex: 1 }]}>Word details</Text>
+          {busy && <ActivityIndicator accessibilityLabel="Updating word" color={theme.colors.ink} />}
+          {!confirmDelete && <ActionIcon label="Save changes" icon="checkmark" tone="primary" disabled={!dirty || busy} onPress={() => void save(false)} />}
           <Pressable accessibilityRole="button" accessibilityLabel="Close details" disabled={busy} onPress={close} style={styles.close}>
             <Ionicons name="close" size={24} color={theme.colors.ink} />
           </Pressable>
@@ -104,18 +125,23 @@ export function WordEditor({ word, updateWord, regenerateWord, removeWord, onClo
           {confirmDelete ? <View style={[styles.confirmation, { backgroundColor: theme.colors.canvasSoft }]}>
             <Text style={[typography.titleSm, { color: theme.colors.ink }]}>Remove “{word.term}”?</Text>
             <Text style={[typography.bodySm, { color: theme.colors.body }]}>This removes the word, its review history, and its offline audio on this device. This cannot be undone.</Text>
-            <Button label="Delete word" loading={busy} onPress={() => { void save(true); }} />
-            <Button label="Keep word" variant="outline" disabled={busy} onPress={() => { setConfirmDelete(false); setError(null); }} />
-          </View> : <>
-            <Button label="Save changes" loading={busy} disabled={!dirty} onPress={() => { void save(false); }} />
-            <Button label="Regenerate audio" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate('audio'); }} />
-            <Button label="Regenerate image" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate('image'); }} />
-            <Button label="Regenerate explanation" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate('definition'); }} />
-            <Text style={[typography.caption, { color: theme.colors.muted }]}>Regeneration replaces the selected content, including a saved explanation. If it fails, your current content is kept.</Text>
-            <Button label="Regenerate missing content" variant="outline" disabled={busy || dirty} onPress={() => { void regenerate(); }} />
-            <Text style={[typography.caption, { color: theme.colors.muted }]}>Retry missing meanings, photos, and audio. Existing content is kept. Save edits before retrying.</Text>
-            <Button label="Remove word" variant="outline" disabled={busy} onPress={() => { setConfirmDelete(true); setError(null); }} />
-          </>}
+            <View style={styles.actions}>
+              <ActionIcon label="Keep word" icon="arrow-undo-outline" disabled={busy} onPress={() => { setConfirmDelete(false); setError(null); }} />
+              <ActionIcon label="Delete word" icon="trash" tone="danger" disabled={busy} onPress={() => void save(true)} />
+            </View>
+          </View> : <View style={[styles.toolbar, { borderColor: theme.colors.hairline }]}>
+            <Text style={[typography.captionUppercase, { color: theme.colors.muted }]}>Regenerate</Text>
+            <View style={styles.actions}>
+              <ActionIcon label="Regenerate audio" icon="mic-outline" disabled={busy || dirty} onPress={() => void regenerate('audio')} />
+              <ActionIcon label="Regenerate image" icon="image-outline" disabled={busy || dirty} onPress={() => void regenerate('image')} />
+              <ActionIcon label="Regenerate explanation" icon="document-text-outline" disabled={busy || dirty} onPress={() => void regenerate('definition')} />
+              <ActionIcon label="Regenerate missing content" icon="refresh-outline" disabled={busy || dirty} onPress={() => void regenerate()} />
+              <View style={styles.removeAction}>
+                <ActionIcon label="Remove word" icon="trash-outline" tone="danger" disabled={busy} onPress={() => { setConfirmDelete(true); setError(null); }} />
+              </View>
+            </View>
+            {dirty && <Text style={[typography.caption, { color: theme.colors.muted }]}>Save your edits before regenerating.</Text>}
+          </View>}
         </ScrollView>
       </SafeAreaView>
     </KeyboardAvoidingView>
@@ -131,5 +157,9 @@ const styles = StyleSheet.create({
   schedule: { gap: spacing.xs },
   definition: { minHeight: 104 },
   image: { width: '100%', height: 160, borderRadius: radii.lg },
+  action: { width: 44, height: 44, borderRadius: radii.pill, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xs },
+  toolbar: { gap: spacing.sm, paddingTop: spacing.base, borderTopWidth: 1 },
+  removeAction: { marginLeft: 'auto' },
   confirmation: { padding: spacing.base, borderRadius: radii.lg, gap: spacing.base },
 });

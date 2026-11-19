@@ -73,7 +73,7 @@ it('preserves failed edits, validates an empty term and blocks rapid duplicate s
   await press('Save changes');
   expect(input('Word').props.value).toBe(' Tranquil ');
   expect(renderedText()).toContain('Network unavailable');
-  const save = button('Save changes').props.onPress;
+  const save = pressable('Save changes').props.onPress;
   await act(async () => { save(); save(); });
   expect(deck.updateWord).toHaveBeenCalledTimes(2);
   expect(deck.updateWord).toHaveBeenLastCalledWith('0', { term: 'Tranquil', definition: 'Peaceful' });
@@ -85,7 +85,7 @@ it('requires deletion confirmation, allows cancellation and keeps failures retry
   await mount(); await press('Edit Serene'); await press('Remove word');
   expect(deck.removeWord).not.toHaveBeenCalled();
   await press('Keep word');
-  expect(button('Save changes')).toBeDefined();
+  expect(pressable('Save changes')).toBeDefined();
   await press('Remove word');
   jest.mocked(deck.removeWord).mockRejectedValueOnce(new Error('Offline'));
   await press('Delete word');
@@ -122,7 +122,7 @@ it('retries missing content from details, blocks duplicates and shows failures',
   jest.mocked(deck.regenerateWord).mockRejectedValueOnce(new Error('Network unavailable'));
   await press('Regenerate missing content');
   expect(renderedText()).toContain('Network unavailable');
-  const retry = button('Regenerate missing content').props.onPress;
+  const retry = pressable('Regenerate missing content').props.onPress;
   await act(async () => { retry(); retry(); });
   expect(deck.regenerateWord).toHaveBeenCalledTimes(2);
   expect(deck.regenerateWord).toHaveBeenLastCalledWith('0', undefined);
@@ -132,7 +132,7 @@ it('retries missing content from details, blocks duplicates and shows failures',
 it('requires saving local edits before regeneration', async () => {
   await mount(); await press('Edit Serene');
   act(() => input('Definition').props.onChangeText('My definition'));
-  expect(button('Regenerate missing content').props.disabled).toBe(true);
+  expect(pressable('Regenerate missing content').props.disabled).toBe(true);
   await press('Regenerate missing content');
   expect(deck.regenerateWord).not.toHaveBeenCalled();
 });
