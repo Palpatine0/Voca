@@ -1,0 +1,10 @@
+node_modules
+dist
+.expo
+.expo-shared
+.vercel
+.env
+.env.*
+coverage
+*.log
+.DS_Store

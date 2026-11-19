@@ -13,3 +13,9 @@ web-build
 .idea/
 supabase/.temp/
 supabase/.branches/
+
+# Private local deployment and recovery data
+/recovery/
+/deploy/mac-mini/.env
+/deploy/mac-mini/secrets/
+/deploy/mac-mini/backups/

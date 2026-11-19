@@ -1,0 +1,400 @@
+# Derived from the pinned official Supabase stack; see supabase/UPSTREAM.
+# Only web is exposed for application traffic. Admin is loopback-only.
+name: ${VOCA_STACK_NAME:-voca}
+services:
+  db:
+    container_name: ${VOCA_STACK_NAME:-voca}_db
+    image: supabase/postgres:17.6.1.136
+    restart: unless-stopped
+    volumes:
+      - ./supabase/volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro
+      - ./supabase/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:ro
+      - ./supabase/volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro
+      - ./supabase/volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro
+      - ./supabase/volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:ro
+      - ./supabase/volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:ro
+      - ./supabase/volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:ro
+      - db_data:/var/lib/postgresql/data
+      - db_config:/etc/postgresql-custom
+    healthcheck:
+      test:
+        - CMD
+        - pg_isready
+        - -U
+        - postgres
+        - -h
+        - localhost
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: "5432"
+      POSTGRES_PORT: "5432"
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run init-env.mjs first}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run init-env.mjs first}
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_EXP: "3600"
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+    logging: &a1
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 60s
+  auth:
+    container_name: ${VOCA_STACK_NAME:-voca}_auth
+    image: supabase/gotrue:v2.197.0
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-verbose
+        - --tries=1
+        - --spider
+        - http://localhost:9999/health
+      timeout: 5s
+      interval: 5s
+      retries: 3
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      GOTRUE_API_HOST: 0.0.0.0
+      GOTRUE_API_PORT: 9999
+      API_EXTERNAL_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/supabase/auth/v1
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD:?Run init-env.mjs first}@db:5432/postgres
+      GOTRUE_SITE_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}
+      GOTRUE_URI_ALLOW_LIST: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/reset-password
+      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-true}
+      GOTRUE_JWT_ADMIN_ROLES: service_role
+      GOTRUE_JWT_AUD: authenticated
+      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
+      GOTRUE_JWT_EXP: "3600"
+      GOTRUE_JWT_SECRET: ${JWT_SECRET:?Run init-env.mjs first}
+      GOTRUE_JWT_ISSUER: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/supabase/auth/v1
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL:-}
+      GOTRUE_SMTP_HOST: ${SMTP_HOST:-}
+      GOTRUE_SMTP_PORT: ${SMTP_PORT:-587}
+      GOTRUE_SMTP_USER: ${SMTP_USER:-}
+      GOTRUE_SMTP_PASS: ${SMTP_PASS:-}
+      GOTRUE_SMTP_SENDER_NAME: Voca
+      GOTRUE_MAILER_URLPATHS_INVITE: /supabase/auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /supabase/auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_RECOVERY: /supabase/auth/v1/verify
+      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /supabase/auth/v1/verify
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_SMS_AUTOCONFIRM: "false"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 20s
+  rest:
+    container_name: ${VOCA_STACK_NAME:-voca}_rest
+    image: postgrest/postgrest:v14.18
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - postgrest
+        - --ready
+      interval: 5s
+      timeout: 5s
+      retries: 3
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:?Run init-env.mjs first}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_MAX_ROWS: ${PGRST_DB_MAX_ROWS:-1000}
+      PGRST_DB_EXTRA_SEARCH_PATH: ${PGRST_DB_EXTRA_SEARCH_PATH:-public}
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_ADMIN_SERVER_PORT: 3001
+      PGRST_ADMIN_SERVER_HOST: localhost
+      PGRST_JWT_SECRET: ${JWT_SECRET:?Run init-env.mjs first}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_EXP: "3600"
+    command:
+      - postgrest
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 20s
+  storage:
+    container_name: ${VOCA_STACK_NAME:-voca}_storage
+    image: supabase/storage-api:v1.81.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      rest:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --no-verbose
+        - --tries=1
+        - --spider
+        - http://storage:5000/status
+      timeout: 5s
+      interval: 5s
+      retries: 3
+      start_period: 10s
+    environment:
+      ANON_KEY: ${ANON_KEY:?Run init-env.mjs first}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY:?Run init-env.mjs first}
+      POSTGREST_URL: http://rest:3000
+      AUTH_JWT_SECRET: ${JWT_SECRET:?Run init-env.mjs first}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD:?Run init-env.mjs first}@db:5432/postgres
+      STORAGE_PUBLIC_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/supabase
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
+      FILE_SIZE_LIMIT: "10485760"
+      STORAGE_BACKEND: file
+      GLOBAL_S3_BUCKET: voca
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: voca
+      REGION: local
+      ENABLE_IMAGE_TRANSFORMATION: "false"
+      S3_PROTOCOL_ACCESS_KEY_ID: ${S3_PROTOCOL_ACCESS_KEY_ID:?Run init-env.mjs first}
+      S3_PROTOCOL_ACCESS_KEY_SECRET: ${S3_PROTOCOL_ACCESS_KEY_SECRET:?Run init-env.mjs first}
+    volumes:
+      - storage_data:/var/lib/storage
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 20s
+  gateway:
+    container_name: ${VOCA_STACK_NAME:-voca}_gateway
+    image: envoyproxy/envoy:v1.39.1
+    restart: unless-stopped
+    networks:
+      default:
+        aliases:
+          - api-gw
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - timeout 1 bash -c '</dev/tcp/127.0.0.1/8000'
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    depends_on:
+      auth:
+        condition: service_healthy
+      rest:
+        condition: service_healthy
+      storage:
+        condition: service_healthy
+    volumes:
+      - ./supabase/volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+      - ./supabase/volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro
+      - ./supabase/volumes/api/envoy/lds.template.yaml:/etc/envoy/lds.template.yaml:ro
+      - ./supabase/volumes/api/envoy/docker-entrypoint.sh:/docker-entrypoint.sh:ro
+    environment:
+      ANON_KEY: ${ANON_KEY:?Run init-env.mjs first}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?Run init-env.mjs first}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:-}
+      SUPABASE_SECRET_KEY: ${SUPABASE_SECRET_KEY:-}
+      ANON_KEY_ASYMMETRIC: ${ANON_KEY_ASYMMETRIC:-}
+      SERVICE_ROLE_KEY_ASYMMETRIC: ${SERVICE_ROLE_KEY_ASYMMETRIC:-}
+      SUPABASE_PUBLIC_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/supabase
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:-voca}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:?Run init-env.mjs first}
+    entrypoint:
+      - /bin/sh
+      - /docker-entrypoint.sh
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 20s
+    ports:
+      - 127.0.0.1:${VOCA_ADMIN_PORT:-8001}:8000
+  meta:
+    container_name: ${VOCA_STACK_NAME:-voca}_meta
+    image: supabase/postgres-meta:v0.100.0
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PG_META_PORT: 8080
+      PG_META_DB_HOST: db
+      PG_META_DB_PORT: "5432"
+      PG_META_DB_NAME: postgres
+      PG_META_DB_USER: postgres
+      PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD:?Run init-env.mjs first}
+      CRYPTO_KEY: ${PG_META_CRYPTO_KEY:?Run init-env.mjs first}
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 20s
+    profiles:
+      - admin
+  studio:
+    container_name: ${VOCA_STACK_NAME:-voca}_admin
+    image: supabase/studio:2026.10.12-sha-3699278
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://localhost:3000/api/platform/profile').then((r) => {if (r.status !== 200) throw new Error(r.status)})"
+      timeout: 10s
+      interval: 5s
+      retries: 3
+      start_period: 20s
+    environment:
+      HOSTNAME: 0.0.0.0
+      STUDIO_PG_META_URL: http://meta:8080
+      POSTGRES_PORT: "5432"
+      POSTGRES_HOST: db
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run init-env.mjs first}
+      POSTGRES_USER_READ_WRITE: postgres
+      PG_META_CRYPTO_KEY: ${PG_META_CRYPTO_KEY:?Run init-env.mjs first}
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_MAX_ROWS: ${PGRST_DB_MAX_ROWS:-1000}
+      PGRST_DB_EXTRA_SEARCH_PATH: ${PGRST_DB_EXTRA_SEARCH_PATH:-public}
+      DEFAULT_ORGANIZATION_NAME: Seth McCarthy
+      DEFAULT_PROJECT_NAME: Voca
+      OPENAI_API_KEY: ""
+      SUPABASE_URL: http://gateway:8000
+      SUPABASE_PUBLIC_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/supabase
+      SUPABASE_ANON_KEY: ${ANON_KEY:?Run init-env.mjs first}
+      SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY:?Run init-env.mjs first}
+      AUTH_JWT_SECRET: ${JWT_SECRET:?Run init-env.mjs first}
+      SUPABASE_PUBLISHABLE_KEY: ""
+      SUPABASE_SECRET_KEY: ""
+      ENABLED_FEATURES_LOGS_ALL: "false"
+      SNIPPETS_MANAGEMENT_FOLDER: /app/snippets
+    volumes:
+      - admin_snippets:/app/snippets
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+    stop_grace_period: 20s
+    profiles:
+      - admin
+    depends_on:
+      meta:
+        condition: service_started
+      db:
+        condition: service_healthy
+  api:
+    container_name: ${VOCA_STACK_NAME:-voca}_api
+    image: ${VOCA_STACK_NAME:-voca}_api:${VOCA_RELEASE:-local}
+    build:
+      context: ../../api
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      PORT: "8080"
+      HOST: 0.0.0.0
+      SUPABASE_URL: http://gateway:8000
+      SUPABASE_PUBLIC_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/supabase
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?Run init-env.mjs first}
+      SUPABASE_STORAGE_BUCKET: voca-media
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_VOICE_ID: ${ELEVENLABS_VOICE_ID:-EXAVITQu4vr4xnSDxMaL}
+      ELEVENLABS_MODEL_ID: ${ELEVENLABS_MODEL_ID:-eleven_multilingual_v2}
+      UNSPLASH_ACCESS_KEY: ${UNSPLASH_ACCESS_KEY:-}
+    depends_on:
+      gateway:
+        condition: service_healthy
+    logging: *a1
+    stop_grace_period: 30s
+  web:
+    container_name: ${VOCA_STACK_NAME:-voca}_web
+    image: ${VOCA_STACK_NAME:-voca}_web:${VOCA_RELEASE:-local}
+    build:
+      context: ../../ui
+      args:
+        EXPO_PUBLIC_API_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/api
+        EXPO_PUBLIC_SUPABASE_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}/supabase
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY:?Run init-env.mjs first}
+        EXPO_PUBLIC_SITE_URL: ${VOCA_SITE_URL:?Set VOCA_SITE_URL}
+    restart: unless-stopped
+    ports:
+      - ${VOCA_BIND_ADDRESS:-127.0.0.1}:${VOCA_HTTP_PORT:-8088}:8080
+    depends_on:
+      api:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    logging: *a1
+  backup:
+    container_name: ${VOCA_STACK_NAME:-voca}_backup
+    image: debian:bookworm-slim
+    profiles:
+      - maintenance
+    network_mode: none
+    volumes:
+      - storage_data:/storage:ro
+    entrypoint: tar
+    logging: *a1
+  tunnel:
+    container_name: ${VOCA_STACK_NAME:-voca}_tunnel
+    image: cloudflare/cloudflared:2026.10.0
+    profiles:
+      - public
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command:
+      - tunnel
+      - --no-autoupdate
+      - run
+      - --token-file
+      - /run/secrets/tunnel_token
+    volumes:
+      - type: bind
+        source: ./secrets/tunnel-token
+        target: /run/secrets/tunnel_token
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      web:
+        condition: service_healthy
+    logging: *a1
+networks:
+  default:
+    name: ${VOCA_STACK_NAME:-voca}_network
+volumes:
+  db_data:
+    name: ${VOCA_STACK_NAME:-voca}_db_data
+  db_config:
+    name: ${VOCA_STACK_NAME:-voca}_db_config
+  storage_data:
+    name: ${VOCA_STACK_NAME:-voca}_storage_data
+  admin_snippets:
+    name: ${VOCA_STACK_NAME:-voca}_admin_snippets

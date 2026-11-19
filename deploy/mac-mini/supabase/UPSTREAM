@@ -1,0 +1,5 @@
+Supabase Docker source
+https://github.com/supabase/supabase
+Revision: 831d6302c7361c0a5115a91e953bdf084eb85330
+Only gateway configuration and database bootstrap SQL are vendored.
+The parent Compose file selects the services used by Voca.

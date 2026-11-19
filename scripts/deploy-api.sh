@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${VOCA_DEPLOY_LEGACY_KOYEB:-}" != "1" ]]; then
+  echo "Voca now runs on the Mac mini. See deploy/mac-mini/README.md."
+  echo "For an intentional legacy rollback only, set VOCA_DEPLOY_LEGACY_KOYEB=1."
+  exit 1
+fi
+
 # Uses Thread's GitHub -> api/Dockerfile deployment layout.
 # Deploys the remote main branch, not uncommitted local files.
 # Requires an authenticated Koyeb CLI with access to Palpatine0/Voca.

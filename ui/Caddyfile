@@ -1,0 +1,47 @@
+{
+    admin off
+    auto_https off
+}
+
+:8080 {
+    encode zstd gzip
+    header {
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+    @plaintext header X-Forwarded-Proto http
+    redir @plaintext https://{host}{uri} 308
+
+    handle /healthz {
+        respond "ok" 200
+    }
+
+    handle_path /api/* {
+        reverse_proxy api:8080
+    }
+
+    # Only the application's Supabase APIs are public. Studio, SQL metadata,
+    # the database port, and gateway administration never use this route.
+    @supabase path /supabase/auth/v1/* /supabase/rest/v1/* /supabase/storage/v1/*
+    handle @supabase {
+        uri strip_prefix /supabase
+        reverse_proxy gateway:8000
+    }
+    handle /supabase* {
+        respond "Not found" 404
+    }
+
+    handle {
+        root * /srv
+        @assets path /_expo/* /assets/*
+        header @assets Cache-Control "public, max-age=31536000, immutable"
+        # Keep the app shell fresh after a deployment; deep links use the SPA.
+        route {
+            try_files {path} /index.html
+            @shell path /index.html
+            header @shell Cache-Control "no-cache"
+            file_server
+        }
+    }
+}
